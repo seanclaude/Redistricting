@@ -1,0 +1,30 @@
+<Document>
+<Style id="par_style">
+    <BalloonStyle>
+        <text>
+            <![CDATA[
+                <h2>$[PAR_schema/PARcode]</h2>
+            ]]>
+        </text>
+    </BalloonStyle>
+    <LineStyle>
+        <color>ff0000ff</color>
+        <width>5</width>
+    </LineStyle>
+    <PolyStyle>
+        <fill>0</fill>
+    </PolyStyle>
+</Style>
+<StyleMap id="par_stylemap">
+<Pair>
+    <key>normal</key>
+    <styleUrl>#par_style</styleUrl>
+</Pair>
+<Pair>
+    <key>highlight</key>
+    <styleUrl>#par_style</styleUrl>
+</Pair>
+</StyleMap>
+</Document>
+
+

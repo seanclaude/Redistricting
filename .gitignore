@@ -1,0 +1,7 @@
+*.pyc
+/ui_configuration.py
+/ui_delimitationtoolbox_dock.py
+*.name
+*.iml
+*.xml
+/scripts/build-installer.cmd

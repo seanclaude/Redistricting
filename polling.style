@@ -1,0 +1,50 @@
+<Document>
+<Style id="poll_style">
+    <BalloonStyle>
+        <text>
+            <![CDATA[
+                <style>
+                    table.balloon {width: 300px;margin:0;}
+
+                    td, th {margin:0; padding:2px 4px;}
+
+                    table.balloon > thead th {
+                        border-bottom:1px solid #666666;
+                        font-weight:bold;
+                    }
+
+                    table.balloon > tfoot td {
+                        border-top:1px solid #666666;
+                        font-weight:bold;
+                    }
+
+                    table.balloon td, table.balloon th {text-align: right;}
+                    table.balloon tr > td:first-child,
+                    table.balloon tr > th:first-child {
+                        text-align:left !important;
+                    }
+                </style>
+                <h2>$[POLL_schema/PARcode]/$[POLL_schema/STATEcode]/$[POLL_schema/POLLcode]</h2>
+                <p>$[POLL_schema/Voters]</p>
+            ]]>
+        </text>
+    </BalloonStyle>
+    <LineStyle>
+        <color>ff000000</color>
+        <width>1</width>
+    </LineStyle>
+    <PolyStyle>
+        <fill>1</fill>
+    </PolyStyle>
+</Style>
+<StyleMap id="poll_stylemap">
+    <Pair>
+        <key>normal</key>
+        <styleUrl>#poll_style</styleUrl>
+    </Pair>
+    <Pair>
+        <key>highlight</key>
+        <styleUrl>#poll_style</styleUrl>
+    </Pair>
+</StyleMap>
+</Document>
