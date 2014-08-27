@@ -1,4 +1,4 @@
-DelimitationBuilder
+DelimitationToolbox
 ===================
 
-A QGIS Plugin that helps to automate electoral constituency delimitation work
+A QGIS Plugin to help automate electoral delimitation work
