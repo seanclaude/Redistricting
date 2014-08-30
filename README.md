@@ -1,7 +1,7 @@
 DelimitationToolbox
 ===================
 
-A QGIS plugin for containing various GIS Tools for electoral delimitation. Features include
+A QGIS plugin containing various GIS Tools for electoral delimitation. Features include
 - insertion of attributes from CSV to ESRI Shapefile
 - Generation of Google Earth KMZ file
 - Styling of KML file
