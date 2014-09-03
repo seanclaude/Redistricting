@@ -22,9 +22,9 @@
 
 import math
 import colouring
+from delimitation import LayerType
 from enum import Enum
 from helper.ui import QgisMessageBarProgress, isnull
-from shapefile import LayerType
 from qgis.core import QgsVectorLayer, QgsFeature, QgsPoint, QgsGeometry
 
 

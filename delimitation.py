@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-
 """
 /***************************************************************************
  DelimitationToolbox
@@ -21,38 +20,197 @@
  *                                                                         *
  ***************************************************************************/
 """
+import traceback
+from PyQt4 import QtCore
+import ogr
+import osr
 from colouring import Colouring
-
-__author__ = 'Sean Lin'
-__date__ = 'May 2014'
-__copyright__ = '(C) 2014 by Sean Lin'
-
 import os
 from zipfile import ZipFile
 import csv
 import glob
 import re
-import shapefile
-from qgis.core import QgsVectorLayer, QgsFeature, QgsVectorFileWriter, QgsGeometry
+from enum import Enum
+from qgis.core import QgsVectorLayer, QgsFeature, QgsVectorFileWriter, QgsGeometry, QgsMapLayerRegistry
+from helper.qgis_util import get_spatialreference
 from lxml import etree
 from configuration import Configuration
-from helper.exception import *
-from shapefile import LayerType, Layers
-from pykml.factory import KML_ElementMaker as KML
-from helper.ui import QgisMessageBarProgress, open_folder
+from packages.pykml.factory import KML_ElementMaker as KML
+from packages.pykml.factory import GX_ElementMaker as GX
+from helper.ui import open_folder, MessageType
+
+ogr.UseExceptions()
+osr.UseExceptions()
 
 
-class Delimitation(object):
-    def __init__(self, widget, working_name, source_path, dest_path=None):
+class OutputFlag(Enum):
+    __order__ = 'Shapefile_KML Shapefile KML_ONLY'  # only needed in 2.x
+    Shapefile_KML = 1
+    Shapefile = 2
+    KML_ONLY = 4
+
+
+class LayerType(Enum):
+    __order__ = 'Polling State Parliament'  # only needed in 2.x
+    Polling = 1
+    State = 2
+    Parliament = 4
+
+
+class Layers(object):
+    def __init__(self):
+        self.features = {}
+        self.schema = {}
+
+    def add(self, features, layer_type):
+        if layer_type in self.features:
+            self.features[layer_type].extend(features)
+        else:
+            self.features[layer_type] = features
+
+    def add_schema(self, schema, layer_type):
+        self.schema[layer_type] = schema
+
+    @staticmethod
+    def get_schema_name(layertype):
+        return "{0}schema".format(Configuration().read(layertype.name, "prefix"))
+
+    @staticmethod
+    def get_style_name(layertype, prefix=""):
+        return "{0}style{1}".format(Configuration().read(layertype.name, "prefix"), prefix).lower()
+
+    @staticmethod
+    def get_stylemap_name(layertype):
+        return "{0}stylemap".format(Configuration().read(layertype.name, "prefix")).lower()
+
+    @staticmethod
+    def sortkey_expression(layer_type):
+        sortkey = Configuration().read(layer_type.name, "sort")
+        return lambda x: x.attributes[sortkey]
+
+    def export_kml_schema(self, layer_type, idstring, namestring):
+        kml = KML.Schema(id=idstring, name=namestring)
+        for name in self.schema[layer_type]:
+            sf = KML.SimpleField(name=name, type="string")
+            kml.append(sf)
+
+        return kml
+
+    def groupsort(self, layertype, groupkey=None):
+        if groupkey is None:
+            groupkey = Configuration().read(layertype.name, "sort")
+        self.features[layertype].sort(key=lambda x: x.attributes[groupkey])
+
+
+class ShapeFileBase(object):
+    def __init__(self, layertype, srcepsg):
+        self.layer_type = layertype
+        self.epsg = srcepsg
+        self.__spatial_reference = None
+
+    @property
+    def spatial_refence(self):
+        if self.__spatial_reference is None:
+            self.__spatial_reference = osr.SpatialReference()
+            self.__spatial_reference.ImportFromEPSG(self.epsg)
+        return self.__spatial_reference
+
+
+class Feature(ShapeFileBase):
+    @property
+    def attributes(self):
+        return self.__attributes
+
+    @property
+    def geometry(self):
+        return self.__qgs_geometry
+
+    def __init__(self, id, attributes, geometry, srcepsg, layertype):
+        super(Feature, self).__init__(layertype, int(srcepsg))
+        self.id = id
+        self.__attributes = attributes
+        self.__qgs_geometry = geometry
+
+    def get_name(self):
+        mformat = Configuration().read(self.layer_type.name, "name_format")
+        mvalues = [self.__attributes[x.strip()] for x in Configuration().read(self.layer_type.name, "name_columns")]
+
+        return mformat.format(*mvalues)
+
+    def __get_kml_polygon(self):
+        in_crs = osr.SpatialReference()
+        in_crs.ImportFromEPSG(self.epsg)
+        transform = osr.CoordinateTransformation(get_spatialreference(self.epsg), get_spatialreference(4326))
+        geom = ogr.CreateGeometryFromWkt(self.__qgs_geometry.exportToWkt())
+        geom.Transform(transform)
+
+        return etree.fromstring(geom.ExportToKML("clampToGround"))
+
+    def __get_draworder(self):
+        return Configuration().read(self.layer_type.name, "kml_draworder")
+
+    # returns a placemark object
+    def export_as_placemark(self, fillcolour=None):
+        schemaurl = Layers.get_schema_name(self.layer_type)
+        styleurl = Layers.get_stylemap_name(self.layer_type)
+
+        placemark = KML.Placemark(
+            KML.name(self.get_name()),
+            KML.styleUrl('#' + styleurl)
+        )
+
+        if fillcolour is not None:
+            placemark.append(
+                KML.Style(
+                    KML.PolyStyle(
+                        KML.color('88' + fillcolour),
+                    )
+                )
+            )
+
+        extdata = KML.ExtendedData(
+            KML.SchemaData(schemaUrl='#' + schemaurl))
+        for attr in self.__attributes.items():
+            data = KML.SimpleData(attr[1], name=attr[0])
+            extdata.SchemaData.append(data)
+
+        placemark.append(extdata)
+        geom = self.__get_kml_polygon()
+        self.__append_draworder(geom)
+
+        placemark.append(geom)
+
+        return placemark
+
+    def __append_draworder(self, root):
+        if root.tag == 'Polygon':
+            do = GX.drawOrder(self.__get_draworder())
+            root.append(do)
+        elif root.tag == 'MultiGeometry':
+            for polygon in root.getchildren():
+                self.__append_draworder(polygon)
+        else:
+            raise Exception('Unknown Polygon type => {}'.format(root.tag))
+
+
+class Delimitation(QtCore.QObject):
+    finished = QtCore.pyqtSignal(object)
+    error = QtCore.pyqtSignal(Exception, basestring)
+    progress = QtCore.pyqtSignal(float)
+    message = QtCore.pyqtSignal(Enum, basestring)
+
+    def __init__(self, region_name, source_path, dest_path=None):
+        QtCore.QObject.__init__(self)
+
         self.__all_attribute_fieldnames = set()
-        self.__widget = widget
         self.__input_directory = source_path
+        self.killed = False
 
         if not dest_path:
             dest_path = os.path.join(os.path.normpath(source_path), Configuration().read("KML", "outputdir"))
         self.__output_directory = dest_path
 
-        self.__working_name = working_name
+        self.__working_name = region_name
 
         # qgis
         self.map_layers = {}
@@ -61,11 +219,14 @@ class Delimitation(object):
     def __get_output_file(self, prefix=""):
         return os.path.join(self.__output_directory, "{}{}.shp".format(prefix, self.__working_name))
 
-    def __log_and_raise_exception(self, msg):
-        self.__widget.list_checks.msg_fail(msg)
-        raise Exception(msg)
-
     def __create_master_layer(self, filepath):
+
+        try:
+            from helper import debug
+            debug.init_remote(5677)
+        except:
+            pass
+
         src_filepath = filepath
         if not os.path.isabs(src_filepath):
             src_filepath = os.path.join(self.__input_directory, src_filepath)
@@ -104,18 +265,15 @@ class Delimitation(object):
         # go thru each polygon
         match_feat_name = Configuration().read("CSV", "field")
 
-        # setup progress bar
-        progress_txt = "Using {} in {} to match attribute {} in {}." \
-            .format(", ".join(key_columns), csvfilename, match_feat_name, filepath)
-        self.__widget.list_checks.msg_normal(progress_txt)
-        progress = QgisMessageBarProgress(progress_txt)
+        self.message.emit(MessageType.Normal, "Using {} in {} to match attribute {} in {}." \
+                          .format(", ".join(key_columns), csvfilename, match_feat_name, filepath))
         iop = 0
         nop = csv_map.__len__()
         try:
             master_provider = self.master_layer.dataProvider()
             for f in input_layer.getFeatures():
                 iop += 1
-                progress.setPercentage(int(100 * iop / nop))
+                self.progress.emit(int(100 * iop / nop))
 
                 # insert attributes
                 attributes = []
@@ -123,8 +281,9 @@ class Delimitation(object):
                 regexp = Configuration().read("CSV", "regexp")
                 match = re.match(regexp, match_feat_value, re.I)
                 if not match:
-                    self.__log_and_raise_exception(
-                        "{} attribute value of {} is in the incorrect format".format(match_feat_name, match_feat_value))
+                    self.message.emit(MessageType.Fail,
+                                      "{} attribute value of {} is in the incorrect format".format(match_feat_name,
+                                                                                                   match_feat_value))
 
                 match_values = []
                 for i, col in enumerate(key_columns):
@@ -132,7 +291,7 @@ class Delimitation(object):
 
                 row = csv_map.get(tuple(match_values), None)
                 if row is None:
-                    self.__log_and_raise_exception("Unable to find {} in CSV file".format("/".join(match_values)))
+                    self.message.emit(MessageType.Fail, "Unable to find {} in CSV file".format("/".join(match_values)))
 
                 for entry in self.__all_attribute_fieldnames:
                     attributes.append(row[entry])
@@ -142,24 +301,20 @@ class Delimitation(object):
                 feature.setAttributes(attributes)
                 master_provider.addFeatures([feature])
         except Exception as e:
-            self.__widget.list_checks.msg_fail("Insertion failed. {}".format(exception_message()))
-            raise e
-        finally:
-            progress.close()
+            self.error.emit(e, traceback.format_exc())
 
-        self.__widget.list_checks.msg_ok("Insertion complete. {} attributes added to {} features"
+        self.message.emit(MessageType.OK, "Insertion complete. {} attributes added to {} features"
                                          .format(self.master_layer.dataProvider().fields().__len__(),
                                                  self.master_layer.dataProvider().featureCount()))
 
     def __merge_polygons(self, output_layertype):
         dissolve_fieldname = Configuration().read(output_layertype.name, "merge")
         msg = "Dissolving/merging using {}".format(dissolve_fieldname)
-        self.__widget.list_checks.msg_normal(msg)
+        self.message.emit(MessageType.Normal, msg)
 
         input_layer = self.master_layer
 
         # merge/dissolve features
-        progress = QgisMessageBarProgress(msg)
         vprovider = input_layer.dataProvider()
         nfeat = vprovider.featureCount()
         dissolve_field_index = input_layer.fieldNameIndex(dissolve_fieldname)
@@ -179,7 +334,7 @@ class Delimitation(object):
                 add = True
                 for inFeat in input_layer.getFeatures():
                     nelement += 1
-                    progress.setPercentage(int(100 * nelement / nfeat))
+                    self.progress.emit(int(100 * nelement / nfeat))
                     attr_map = inFeat.attributes()
                     temp_item = attr_map[dissolve_field_index]
                     if unicode(temp_item).strip() == unicode(item).strip():
@@ -203,14 +358,44 @@ class Delimitation(object):
                     merged_provider.addFeatures([out_feat])
             merged_layer.commitChanges()
         except:
-            self.__widget.list_checks.msg_fail("Merge failed.")
+            self.message.emit(MessageType.Fail, "Merge failed.")
             raise
         finally:
-            progress.close()
             del merged_provider
 
-        self.__widget.list_checks.msg_ok("Merge completed.")
+        self.message.emit(MessageType.OK, "Merge completed.")
         return merged_layer
+
+    def run_generate_shapefile_kml(self):
+        self.generate(OutputFlag.Shapefile_KML)
+
+    def run_generate_shapefile(self):
+        self.generate(OutputFlag.Shapefile)
+
+    def run_generate_kml(self):
+        self.generate(OutputFlag.KML_ONLY)
+
+    def generate(self, outputflag):
+        success = True
+        try:
+            if outputflag == OutputFlag.Shapefile_KML:
+                self.generate_vector_file(LayerType.Polling, True)
+                self.generate_vector_file(LayerType.State)
+                self.generate_vector_file(LayerType.Parliament)
+                self.generate_kml()
+            elif outputflag == OutputFlag.Shapefile:
+                self.generate_vector_file(LayerType.Polling, True)
+            elif outputflag == OutputFlag.KML_ONLY:
+                self.generate_vector_file(LayerType.State)
+                self.generate_vector_file(LayerType.Parliament)
+                self.generate_kml()
+            else:
+                raise Exception('Unknown output type')
+        except Exception, e:
+            success = False
+            self.error.emit(e, traceback.format_exc())
+
+        self.finished.emit(success)
 
     def generate_vector_file(self, layertype, writetodisk=False, src_layer=None):
         if not src_layer:
@@ -225,7 +410,7 @@ class Delimitation(object):
 
         fields_uri = ["field={}:string(120)".format(x) for x in Configuration().read(layertype.name, "attributes")]
         fields_uri.append("index=yes")
-        self.__widget.list_checks.msg_normal("Generating {} layer ...".format(layertype.name))
+        self.message.emit(MessageType.Normal, "Generating {} layer ...".format(layertype.name))
 
         out_layer = QgsVectorLayer(
             "Polygon?crs={}&{}".format(src_layer.dataProvider().crs().authid(), "&".join(fields_uri)),
@@ -249,15 +434,15 @@ class Delimitation(object):
             _, filename = os.path.split(filepath)
             error = QgsVectorFileWriter.writeAsVectorFormat(out_layer, filepath, "utf-8", None, "ESRI Shapefile")
             if error == QgsVectorFileWriter.NoError:
-                self.__widget.list_checks.msg_ok("{} written".format(filename))
+                self.message.emit(MessageType.OK, "{} written".format(filename))
             else:
-                self.__widget.list_checks.msg_fail("Failed to write {}. {}".format(filename, error))
+                self.message.emit(MessageType.Fail, "Failed to write {}. {}".format(filename, error))
             return
 
-        self.__widget.list_checks.msg_ok("{} layer generated".format(layertype.name))
+        self.message.emit(MessageType.OK, "{} layer generated".format(layertype.name))
 
     def generate_kml(self):
-        self.__widget.list_checks.msg_normal("Generating Google Earth file ...")
+        self.message.emit(MessageType.Normal, "Generating Google Earth file ...")
 
         layers = Layers()
         # extract POLL, STATE and PAR layers
@@ -268,10 +453,10 @@ class Delimitation(object):
                 attr_keys = [a.name() for a in prod.fields()]
                 for f in prod.getFeatures():
                     _, epsg = prod.crs().authid().split(":")
-                    new_f = shapefile.Feature(f.id(), dict(zip(attr_keys, f.attributes())),
-                                              f.geometryAndOwnership(),
-                                              epsg,
-                                              ltype)
+                    new_f = Feature(f.id(), dict(zip(attr_keys, f.attributes())),
+                                    f.geometryAndOwnership(),
+                                    epsg,
+                                    ltype)
                     features.append(new_f)
                 layers.add(features, ltype)
                 layers.add_schema(attr_keys, ltype)
@@ -360,8 +545,8 @@ class Delimitation(object):
                     poll = polllist[j]
                     if poll.attributes[field_match_par] == \
                             par.attributes[field_match_par] and \
-                            poll.attributes[field_match_state] == \
-                            state.attributes[field_match_state]:
+                                    poll.attributes[field_match_state] == \
+                                    state.attributes[field_match_state]:
                         polls.append(poll)
                     else:
                         break
@@ -394,7 +579,7 @@ class Delimitation(object):
 
         os.remove("doc.kml")
 
-        self.__widget.list_checks.msg_ok("{}.kmz created".format(self.__working_name))
+        self.message.emit(MessageType.OK, "{}.kmz created".format(self.__working_name))
 
         # open folder
         open_folder(self.__output_directory)
@@ -422,6 +607,9 @@ class Delimitation(object):
             files.append(os.path.abspath(f))
 
         return files
+
+    def kill(self):
+        self.killed = True
 
 
 def get_unique_values(layer, field_index):

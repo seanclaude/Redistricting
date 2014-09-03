@@ -21,11 +21,6 @@
  *                                                                         *
  ***************************************************************************/
 """
-
-__author__ = 'Sean Lin'
-__date__ = 'May 2014'
-__copyright__ = '(C) 2014 by Sean Lin'
-
 # This will get replaced with a git SHA1 when you do a git archive
 
 __revision__ = '$Format:%H$'

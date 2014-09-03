@@ -5,6 +5,7 @@ import subprocess
 import sys
 from PyQt4.QtCore import Qt
 from PyQt4.QtGui import QBrush, QListWidget, QListWidgetItem, QLabel, QProgressBar
+from enum import Enum
 from helper.string import remove_tags
 from helper.extensions import attach_method
 from qgis.utils import iface
@@ -94,9 +95,15 @@ def extend_qt_list_widget(instance):
     return instance
 
 
+class MessageType(Enum):
+    Fail = -1
+    Normal = 0
+    OK = 1
+
+
 class QgisMessageBarProgress:
 
-    def __init__(self, text):
+    def __init__(self, text=""):
         self.progressMessageBar = \
             iface.messageBar().createMessage(text)
         self.progress = QProgressBar()

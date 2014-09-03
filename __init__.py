@@ -31,10 +31,7 @@ def classFactory(iface):  # pylint: disable=invalid-name
     :type iface: QgsInterface
     """
     try:
-        from helper import debug, log
-
-        log.init("DelimitationToolbox")
-        # if sys.flags.debug:
+        from helper import debug
         debug.init_remote()
     except:
         pass

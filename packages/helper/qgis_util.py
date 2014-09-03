@@ -1,36 +1,9 @@
 import glob
 import logging
 import os
-import sys
-import nt
-from osgeo import ogr
 from osgeo import osr
-from qgis.core import QgsApplication
 from qgis.gui import QgisInterface, QgsMessageBar
 from extensions import attach_method
-
-
-def init_qgis():
-    qgisprefix = os.environ['OSGEO4W_ROOT'] + r'\apps\qgis'
-
-    # configure paths for QGIS
-    os.environ['PATH'] = os.environ['OSGEO4W_ROOT'] + r'\bin;' + qgisprefix + r'\bin;' + os.environ['PATH']
-    os.environ['QT_PLUGIN_PATH'] = os.environ['OSGEO4W_ROOT'] + r'\apps\Qt4\plugins'
-    os.environ['LD_LIBRARY_PATH'] = qgisprefix + r'\lib'
-    os.environ['GDAL_DATA'] = os.environ['OSGEO4W_ROOT'] + r"\share\gdal"
-    os.environ['GDAL_DRIVER_PATH'] = os.environ['OSGEO4W_ROOT'] + r"\bin\gdalplugins"
-    sys.path.insert(0, qgisprefix + r'\python')
-    sys.path.insert(1, qgisprefix + r'\python\qgis')
-    sys.path.insert(2, qgisprefix + r'\python\plugins')
-
-    ogr.UseExceptions()
-    osr.UseExceptions()
-
-    # configure QGIS paths
-    QgsApplication.setPrefixPath(qgisprefix, True)
-    QgsApplication.initQgis()
-    app = QgsApplication([], True)
-    return app
 
 
 def get_spatialreference(epsg):
@@ -77,6 +50,7 @@ def save_qpj(filepath, epsg):
         crs = osr.SpatialReference()
         crs.ImportFromEPSG(epsg)
         pfile.write(crs.ExportToWkt())
+
 
 def extend_qgis_interface(instance):
     def info(self, message, duration=2):
