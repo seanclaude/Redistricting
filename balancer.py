@@ -22,6 +22,7 @@
 
 import math
 import colouring
+from configuration import Configuration
 from delimitation import LayerType
 from enum import Enum
 from helper.ui import QgisMessageBarProgress, isnull
@@ -65,6 +66,7 @@ class Balancer(object):
         self.statemin_target = None
         self.statemin_actual = None
         self.statemin_actual_precentage = 0.00
+        self.state_prefix_format = "%02d"
 
         self.par_average = 0
         self.par_average_target = par_average_target
@@ -74,6 +76,7 @@ class Balancer(object):
         self.parmin_target = None
         self.parmin_actual = None
         self.parmin_actual_precentage = 0.00
+        self.par_prefix_format = "%03d"
 
         # store list of DMs that fits into the normalized range
         self.__successes = {}
@@ -146,6 +149,27 @@ class Balancer(object):
 
         raise Exception("Not implemented")
 
+    def init_prefixes(self, par_attr_format=None, state_attr_format=None):
+        if self.topology_polling.keys().__len__() == 0:
+            return
+
+        ordered = sorted(self.topology_polling.items(),
+                         key=lambda x: (x[1][self.par_field], x[1][self.state_field]))
+
+        if par_attr_format:
+            self.par_prefix_format = par_attr_format
+        else:
+            par_attr = ordered[0][1][self.par_field].rstrip('1')
+            par_intwidth = par_attr.count('0') + 1
+            self.par_prefix_format = "{}%0{}d".format(par_attr.rstrip('0'), par_intwidth)
+
+        if state_attr_format:
+            self.state_prefix_format = state_attr_format
+        else:
+            state_attr = ordered[0][1][self.state_field].rstrip('1')
+            state_intwidth = state_attr.count('0') + 1
+            self.state_prefix_format = "{}%0{}d".format(state_attr.rstrip('0'), state_intwidth)
+
     def init_topology(self):
         self.topology_polling.clear()
 
@@ -177,6 +201,7 @@ class Balancer(object):
         self.topology_state.clear()
         self.topology_par.clear()
         self.init_topology()
+        self.init_prefixes()
 
         for k, v in self.topology_polling.iteritems():
             voters_value = v[self.voters_field]
@@ -262,6 +287,10 @@ class Balancer(object):
         else:
             self.state_average = float(total_voters) / self.state_count
 
+            # for old topo
+            if not self.state_count_limit:
+                self.state_count_limit = self.state_count
+
         if self.state_average_target:
             self.state_average = self.state_average_target
 
@@ -278,6 +307,10 @@ class Balancer(object):
             self.par_average = float(total_voters) / self.par_count_limit
         else:
             self.par_average = float(total_voters) / self.par_count
+
+            # for old topo
+            if not self.par_count_limit:
+                self.par_count_limit = self.par_count
 
         if self.par_average_target:
             self.par_average = self.par_average_target
@@ -339,11 +372,18 @@ class Balancer(object):
     def get_features_total(self):
         return tuple((self.par_count, self.state_count, self.topology_polling.keys().__len__()))
 
+    def get_unused(self):
+        pars = [self.par_prefix_format % par for par in range(1, self.par_count_limit + 1)]
+        states = [self.state_prefix_format % state for state in range(1, self.state_count_limit + 1)]
+        pars_left = set(pars) \
+            .difference([v[self.par_field] for v in self.topology_polling.values()])
+        states_left = set(states) \
+            .difference([v[self.state_field] for v in self.topology_polling.values()])
+        return tuple((pars_left, states_left))
+
     def resequence(self, par_new_prefix):
         ordered = sorted(self.topology_polling.items(),
                          key=lambda x: (x[1][self.par_field], x[1][self.state_field]))
-        par_format = "{}%02d".format(par_new_prefix)
-        state_format = "%03d"
         par_renumber = 0
         state_renumber = 0
         par_current = None
@@ -359,8 +399,8 @@ class Balancer(object):
             par_current = o[1][self.par_field]
 
             self.update_topology(
-                {o[0]: {self.state_field: state_format % state_renumber,
-                        self.par_field: par_format % par_renumber}})
+                {o[0]: {self.state_field: self.state_prefix_format % state_renumber,
+                        self.par_field: self.par_prefix_format % par_renumber}})
 
 
 class NodePOLL(object):

@@ -33,7 +33,7 @@ SOURCES = \
 	delimitationtoolbox.py \
 	delimitationtoolbox_dock.py
 
-PLUGINNAME = DelimitationToolboxDebug
+PLUGINNAME = DelimitationToolbox
 
 PY_FILES = \
 	delimitationtoolbox.py \

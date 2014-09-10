@@ -30,15 +30,16 @@ def classFactory(iface):  # pylint: disable=invalid-name
     :param iface: A QGIS interface instance.
     :type iface: QgsInterface
     """
-    try:
-        from helper import debug
-        debug.init_remote()
-    except:
-        pass
-
     delimitation_path = os.path.split(__file__)[0]
     package_path = os.path.join(delimitation_path, "packages")
     sys.path.append(package_path)
 
+    try:
+        from helper import debug2
+        debug2.init_remote()
+    except:
+        pass
+
     from delimitationtoolbox import DelimitationToolbox
-    return DelimitationToolbox(iface)
+
+    return DelimitationToolbox(iface, delimitation_path.find('Debug') != -1)

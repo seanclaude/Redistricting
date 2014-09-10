@@ -39,8 +39,8 @@ from packages.pykml.factory import KML_ElementMaker as KML
 from packages.pykml.factory import GX_ElementMaker as GX
 from helper.ui import open_folder, MessageType
 
-ogr.UseExceptions()
-osr.UseExceptions()
+# ogr.UseExceptions()
+#osr.UseExceptions()
 
 
 class OutputFlag(Enum):
@@ -216,17 +216,13 @@ class Delimitation(QtCore.QObject):
         self.map_layers = {}
         self.master_layer = None
 
+        if not os.path.isdir(self.__output_directory):
+            os.mkdir(self.__output_directory)
+
     def __get_output_file(self, prefix=""):
         return os.path.join(self.__output_directory, "{}{}.shp".format(prefix, self.__working_name))
 
     def __create_master_layer(self, filepath):
-
-        try:
-            from helper import debug
-            debug.init_remote(5677)
-        except:
-            pass
-
         src_filepath = filepath
         if not os.path.isabs(src_filepath):
             src_filepath = os.path.join(self.__input_directory, src_filepath)
@@ -250,9 +246,6 @@ class Delimitation(QtCore.QObject):
         # create temp layer
         self.master_layer = QgsVectorLayer("Polygon?{}".format("&".join(fieldstrings)), "temporary_layer", "memory")
 
-        if not os.path.isdir(self.__output_directory):
-            os.mkdir(self.__output_directory)
-
         # read csv into a dict first
         csv_map = {}
         key_columns = Configuration().read("CSV", "columns")
@@ -265,7 +258,7 @@ class Delimitation(QtCore.QObject):
         # go thru each polygon
         match_feat_name = Configuration().read("CSV", "field")
 
-        self.message.emit(MessageType.Normal, "Using {} in {} to match attribute {} in {}." \
+        self.message.emit(MessageType.Normal, "Using {} in {} to match attribute {} in {}."
                           .format(", ".join(key_columns), csvfilename, match_feat_name, filepath))
         iop = 0
         nop = csv_map.__len__()
@@ -304,8 +297,8 @@ class Delimitation(QtCore.QObject):
             self.error.emit(e, traceback.format_exc())
 
         self.message.emit(MessageType.OK, "Insertion complete. {} attributes added to {} features"
-                                         .format(self.master_layer.dataProvider().fields().__len__(),
-                                                 self.master_layer.dataProvider().featureCount()))
+                          .format(self.master_layer.dataProvider().fields().__len__(),
+                                  self.master_layer.dataProvider().featureCount()))
 
     def __merge_polygons(self, output_layertype):
         dissolve_fieldname = Configuration().read(output_layertype.name, "merge")
@@ -376,6 +369,13 @@ class Delimitation(QtCore.QObject):
         self.generate(OutputFlag.KML_ONLY)
 
     def generate(self, outputflag):
+        try:
+            from helper import debug2
+
+            debug2.init_remote(5677)
+        except:
+            pass
+
         success = True
         try:
             if outputflag == OutputFlag.Shapefile_KML:
