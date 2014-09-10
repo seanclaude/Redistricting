@@ -767,12 +767,11 @@ class DelimitationToolboxDock(QDockWidget, FORM_CLASS):
         self.thread.quit()
         self.thread.wait()
         self.thread.deleteLater()
-        self.progressBar.close()
 
-        if ret:
+        if not ret:
             self.iface.info('Done!')
         else:
-            self.iface.error("Something went wrong. Check logs for more info.")
+            self.messsage_handler(MessageType.Fail, ret)
 
         if self.progressBar:
             self.progressBar.close()

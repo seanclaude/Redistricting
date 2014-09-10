@@ -29,6 +29,8 @@ from PyQt4.QtGui import QAction, QIcon, QMainWindow, QDockWidget
 __revision__ = '$Format:%H$'
 __version__ = '0.1.8'
 
+DEBUG = False
+
 # Import the code for the dialog
 import resources_rc
 from delimitationtoolbox_dock import DelimitationToolboxDock
@@ -39,7 +41,7 @@ class DelimitationToolbox:
     __pname__ = ''
     __modname__ = ''
 
-    def __init__(self, iface, debug):
+    def __init__(self, iface):
         """Constructor.
 
         :param iface: An interface instance that will be passed to this class
@@ -48,7 +50,7 @@ class DelimitationToolbox:
         :type iface: QgsInterface
         """
 
-        if debug:
+        if DEBUG:
             DelimitationToolbox.__pname__ = 'Delimitation Toolbox Debug'
             DelimitationToolbox.__modname__ = 'DelimitationToolboxDebug'
         else:

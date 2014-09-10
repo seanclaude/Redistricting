@@ -262,21 +262,25 @@ class Delimitation(QtCore.QObject):
                           .format(", ".join(key_columns), csvfilename, match_feat_name, filepath))
         iop = 0
         nop = csv_map.__len__()
+        master_provider = self.master_layer.dataProvider()
         try:
-            master_provider = self.master_layer.dataProvider()
             for f in input_layer.getFeatures():
                 iop += 1
                 self.progress.emit(int(100 * iop / nop))
 
                 # insert attributes
                 attributes = []
-                match_feat_value = f[match_feat_name].strip()
+                row_match_value = f[match_feat_name]
+                if row_match_value:
+                    match_feat_value = row_match_value.strip()
+                else:
+                    raise Exception("{} in Feature {} has no value".format(match_feat_name, f.id()))
+
                 regexp = Configuration().read("CSV", "regexp")
                 match = re.match(regexp, match_feat_value, re.I)
                 if not match:
-                    self.message.emit(MessageType.Fail,
-                                      "{} attribute value of {} is in the incorrect format".format(match_feat_name,
-                                                                                                   match_feat_value))
+                    raise Exception("{} attribute value of {} is in the incorrect format".format(match_feat_name,
+                                                                                                 match_feat_value))
 
                 match_values = []
                 for i, col in enumerate(key_columns):
@@ -284,7 +288,7 @@ class Delimitation(QtCore.QObject):
 
                 row = csv_map.get(tuple(match_values), None)
                 if row is None:
-                    self.message.emit(MessageType.Fail, "Unable to find {} in CSV file".format("/".join(match_values)))
+                    raise Exception("Unable to find {} in CSV file".format("/".join(match_values)))
 
                 for entry in self.__all_attribute_fieldnames:
                     attributes.append(row[entry])
@@ -293,8 +297,10 @@ class Delimitation(QtCore.QObject):
                 feature.setGeometry(f.geometry())
                 feature.setAttributes(attributes)
                 master_provider.addFeatures([feature])
-        except Exception as e:
-            self.error.emit(e, traceback.format_exc())
+        except Exception, e:
+            raise e
+        finally:
+            del master_provider
 
         self.message.emit(MessageType.OK, "Insertion complete. {} attributes added to {} features"
                           .format(self.master_layer.dataProvider().fields().__len__(),
@@ -351,8 +357,7 @@ class Delimitation(QtCore.QObject):
                     merged_provider.addFeatures([out_feat])
             merged_layer.commitChanges()
         except:
-            self.message.emit(MessageType.Fail, "Merge failed.")
-            raise
+            raise Exception("Merge failed.")
         finally:
             del merged_provider
 
@@ -376,7 +381,7 @@ class Delimitation(QtCore.QObject):
         except:
             pass
 
-        success = True
+        fail = ""
         try:
             if outputflag == OutputFlag.Shapefile_KML:
                 self.generate_vector_file(LayerType.Polling, True)
@@ -392,10 +397,10 @@ class Delimitation(QtCore.QObject):
             else:
                 raise Exception('Unknown output type')
         except Exception, e:
-            success = False
-            self.error.emit(e, traceback.format_exc())
+            self.message.emit(MessageType.Fail, "{}\n".format(e.message))
+            fail = traceback.format_exc()
 
-        self.finished.emit(success)
+        self.finished.emit(fail)
 
     def generate_vector_file(self, layertype, writetodisk=False, src_layer=None):
         if not src_layer:

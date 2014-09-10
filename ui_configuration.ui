@@ -71,7 +71,7 @@
      </property>
     </widget>
    </widget>
-   <widget class="QWidget" name="tab_DUN">
+   <widget class="QWidget" name="tab_STATE">
     <attribute name="title">
      <string>State Style</string>
     </attribute>
