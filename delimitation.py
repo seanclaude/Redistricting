@@ -195,7 +195,7 @@ class Feature(ShapeFileBase):
 
 class Delimitation(QtCore.QObject):
     finished = QtCore.pyqtSignal(object)
-    error = QtCore.pyqtSignal(Exception, basestring)
+    #error = QtCore.pyqtSignal(Exception, basestring)
     progress = QtCore.pyqtSignal(float)
     message = QtCore.pyqtSignal(Enum, basestring)
 
@@ -239,20 +239,28 @@ class Delimitation(QtCore.QObject):
         for layertype in LayerType:
             self.__all_attribute_fieldnames.update(Configuration().read(layertype.name, "attributes"))
 
+        authid = input_layer.dataProvider().crs().authid()
+        if not authid:
+            raise Exception("Unable to determine EPSG for {}".format(src_filepath))
         fieldstrings = ["field={}:string(120)".format(x) for x in self.__all_attribute_fieldnames]
-        fieldstrings.append("crs={}".format(input_layer.dataProvider().crs().authid()))
+        fieldstrings.append("crs={}".format(authid))
         fieldstrings.append("index=yes")
 
         # create temp layer
         self.master_layer = QgsVectorLayer("Polygon?{}".format("&".join(fieldstrings)), "temporary_layer", "memory")
 
         # read csv into a dict first
+        iop = 0
         csv_map = {}
         key_columns = Configuration().read("CSV", "columns")
 
         with open(csvfile_abs, "rb") as csvfile:
             reader = csv.DictReader(csvfile, delimiter=',', quoting=csv.QUOTE_NONE)
-            for row in reader:
+            rows = list(reader)
+            totalrows = len(rows)
+            for row in rows:
+                iop += 1
+                self.progress.emit(int(100 * iop / totalrows))
                 csv_map.update({tuple([row[k] for k in key_columns]): row})
 
         # go thru each polygon
@@ -260,7 +268,7 @@ class Delimitation(QtCore.QObject):
 
         self.message.emit(MessageType.Normal, "Using {} in {} to match attribute {} in {}."
                           .format(", ".join(key_columns), csvfilename, match_feat_name, filepath))
-        iop = 0
+
         nop = csv_map.__len__()
         master_provider = self.master_layer.dataProvider()
         try:
@@ -319,7 +327,11 @@ class Delimitation(QtCore.QObject):
         dissolve_field_index = input_layer.fieldNameIndex(dissolve_fieldname)
         fields = ["field={}:string(120)".format(x.name()) for x in vprovider.fields()]
         fields.append("index=yes")
-        merged_layer = QgsVectorLayer("Polygon?crs={}&{}".format(vprovider.crs().authid(), "&".join(fields)),
+        authid = vprovider.crs().authid()
+        if not authid:
+            del vprovider
+            raise Exception("Unable to determine EPSG for {}".format(vprovider.name()))
+        merged_layer = QgsVectorLayer("Polygon?crs={}&{}".format(authid, "&".join(fields)),
                                       "temporary_merge", "memory")
         merged_provider = merged_layer.dataProvider()
         try:
@@ -359,6 +371,7 @@ class Delimitation(QtCore.QObject):
         except:
             raise Exception("Merge failed.")
         finally:
+            del vprovider
             del merged_provider
 
         self.message.emit(MessageType.OK, "Merge completed.")
@@ -397,10 +410,10 @@ class Delimitation(QtCore.QObject):
             else:
                 raise Exception('Unknown output type')
         except Exception, e:
-            self.message.emit(MessageType.Fail, "{}\n".format(e.message))
+            self.message.emit(MessageType.Fail, "{}\n".format(e.message.__str__()))
             fail = traceback.format_exc()
 
-        self.finished.emit(fail)
+        self.finished.emit(fail.__str__())
 
     def generate_vector_file(self, layertype, writetodisk=False, src_layer=None):
         if not src_layer:
@@ -416,9 +429,11 @@ class Delimitation(QtCore.QObject):
         fields_uri = ["field={}:string(120)".format(x) for x in Configuration().read(layertype.name, "attributes")]
         fields_uri.append("index=yes")
         self.message.emit(MessageType.Normal, "Generating {} layer ...".format(layertype.name))
-
+        authid = src_layer.dataProvider().crs().authid()
+        if not authid:
+            raise Exception("Unable to determine EPSG for {}".format(src_layer.dataProvider().name()))
         out_layer = QgsVectorLayer(
-            "Polygon?crs={}&{}".format(src_layer.dataProvider().crs().authid(), "&".join(fields_uri)),
+            "Polygon?crs={}&{}".format(authid, "&".join(fields_uri)),
             "temporary_generate", "memory")
         out_provider = out_layer.dataProvider()
         for temp_f in src_layer.getFeatures():
@@ -465,6 +480,7 @@ class Delimitation(QtCore.QObject):
                     features.append(new_f)
                 layers.add(features, ltype)
                 layers.add_schema(attr_keys, ltype)
+                del prod
 
         # group/sort features
         for state_index in layers.features.keys():

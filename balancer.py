@@ -66,7 +66,6 @@ class Balancer(object):
         self.statemin_target = None
         self.statemin_actual = None
         self.statemin_actual_precentage = 0.00
-        self.state_prefix_format = "%02d"
 
         self.par_average = 0
         self.par_average_target = par_average_target
@@ -76,6 +75,9 @@ class Balancer(object):
         self.parmin_target = None
         self.parmin_actual = None
         self.parmin_actual_precentage = 0.00
+
+        self.polling_prefix_format = "%02d"
+        self.state_prefix_format = "%02d"
         self.par_prefix_format = "%03d"
 
         # store list of DMs that fits into the normalized range
@@ -386,12 +388,14 @@ class Balancer(object):
                          key=lambda x: (x[1][self.par_field], x[1][self.state_field]))
         par_renumber = 0
         state_renumber = 0
+        polling_renumber = 1
         par_current = None
         state_current = None
 
         for o in ordered:
             if state_current != o[1][self.state_field]:
                 state_renumber += 1
+                polling_renumber = 1  # restart polling area renumbering
             state_current = o[1][self.state_field]
 
             if par_current != o[1][self.par_field]:
@@ -400,7 +404,10 @@ class Balancer(object):
 
             self.update_topology(
                 {o[0]: {self.state_field: self.state_prefix_format % state_renumber,
+                        self.polling_field: self.polling_prefix_format % polling_renumber,
                         self.par_field: self.par_prefix_format % par_renumber}})
+
+            polling_renumber += 1
 
 
 class NodePOLL(object):

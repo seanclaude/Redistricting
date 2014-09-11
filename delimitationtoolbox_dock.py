@@ -746,7 +746,7 @@ class DelimitationToolboxDock(QDockWidget, FORM_CLASS):
 
         self.worker.moveToThread(self.thread)
         self.worker.finished.connect(self.generator_end)
-        self.worker.error.connect(self.generator_error)
+        #self.worker.error.connect(self.generator_error)
         self.worker.message.connect(self.messsage_handler)
         try:
             self.progressBar = QgisMessageBarProgress()
@@ -925,7 +925,7 @@ class DelimitationToolboxDock(QDockWidget, FORM_CLASS):
 
         self.worker.moveToThread(self.thread)
         self.worker.finished.connect(self.generator_end)
-        self.worker.error.connect(self.generator_error)
+        #self.worker.error.connect(self.generator_error)
         self.worker.message.connect(self.messsage_handler)
 
         try:
