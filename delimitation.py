@@ -40,7 +40,7 @@ from packages.pykml.factory import GX_ElementMaker as GX
 from helper.ui import open_folder, MessageType
 
 # ogr.UseExceptions()
-#osr.UseExceptions()
+# osr.UseExceptions()
 
 
 class OutputFlag(Enum):
@@ -243,11 +243,12 @@ class Delimitation(QtCore.QObject):
         if not authid:
             raise Exception("Unable to determine EPSG for {}".format(src_filepath))
         fieldstrings = ["field={}:string(120)".format(x) for x in self.__all_attribute_fieldnames]
-        fieldstrings.append("crs={}".format(authid))
         fieldstrings.append("index=yes")
 
         # create temp layer
-        self.master_layer = QgsVectorLayer("Polygon?{}".format("&".join(fieldstrings)), "temporary_layer", "memory")
+        self.master_layer = QgsVectorLayer("Polygon?crs={}&{}".format(authid, "&".join(fieldstrings)),
+                                           "temporary_layer",
+                                           "memory")
 
         # read csv into a dict first
         iop = 0
@@ -432,9 +433,9 @@ class Delimitation(QtCore.QObject):
         authid = src_layer.dataProvider().crs().authid()
         if not authid:
             raise Exception("Unable to determine EPSG for {}".format(src_layer.dataProvider().name()))
-        out_layer = QgsVectorLayer(
-            "Polygon?crs={}&{}".format(authid, "&".join(fields_uri)),
-            "temporary_generate", "memory")
+        out_layer = QgsVectorLayer("Polygon?crs={}&{}".format(authid, "&".join(fields_uri)),
+                                   "temporary_generate_{}".format(layertype.name),
+                                   "memory")
         out_provider = out_layer.dataProvider()
         for temp_f in src_layer.getFeatures():
             feature = QgsFeature()

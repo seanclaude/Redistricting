@@ -41,7 +41,8 @@ class Balancer(object):
                  state_average_target=None,
                  par_count_limit=None,
                  state_count_limit=None):
-        # get voters
+
+        self.total_voters = 0
         self.topology_polling = {}
         self.topology_state = {}
         self.topology_par = {}
@@ -246,7 +247,7 @@ class Balancer(object):
         return self.colouring_par.colours_grey[colour_index - 1]
 
     def init_par_state_map(self):
-        # {par_key : {d: "-+",
+        # {par_key : {voters:voters, d: "-+",
         # states: { state_key: d}  }}
         self.map_par_state.clear()
         for v in self.topology_polling.values():
@@ -256,7 +257,9 @@ class Balancer(object):
                 continue
 
             self.map_par_state \
-                .setdefault(par_key, {"d": "{:.2f}%".format(self.get_par_deviation(par_key)), "states": {}})
+                .setdefault(par_key, {"d": "{:.2f}%".format(self.get_par_deviation(par_key)),
+                                      "states": {},
+                                      "voters": self.get_par_voters(par_key)})
 
             if not state_key:
                 continue
@@ -265,11 +268,27 @@ class Balancer(object):
                 self.map_par_state[par_key]['states'] \
                     .update({state_key: "{:.2f}%".format(self.get_state_deviation(state_key))})
 
+    def get_par_voters(self, par_name):
+        if not par_name:
+            return 0
+
+        return self.topology_par[par_name]['voters']
+
     def get_par_deviation(self, par_name):
         if not par_name:
             return 0.0
 
         return (self.topology_par[par_name]['voters'] - self.par_average) * 100 / self.par_average
+
+    def get_recommendation(self):
+        # get min/max for number of state seats in a par
+        seats_state_min = math.floor(1.0*self.state_count_limit/self.par_count_limit)
+        seats_state_max = math.ceil(1.0*self.state_count_limit/self.par_count_limit)
+        seats_extras = self.state_count_limit % self.par_count_limit
+
+        # recommended size (voters)
+
+
 
     def get_state_deviation(self, state_name):
         if not state_name:
@@ -279,15 +298,14 @@ class Balancer(object):
 
     def calculate_limits(self, delta):
         self.delta = delta
-
-        total_voters = sum([v['voters'] for k, v in self.topology_par.iteritems()])
+        self.total_voters = sum([v['voters'] for k, v in self.topology_par.iteritems()])
         self.state_count = self.topology_state.keys().__len__()
         self.par_count = self.topology_par.keys().__len__()
 
         if not self.state_count:
-            self.state_average = float(total_voters) / self.state_count_limit
+            self.state_average = float(self.total_voters) / self.state_count_limit
         else:
-            self.state_average = float(total_voters) / self.state_count
+            self.state_average = float(self.total_voters) / self.state_count
 
             # for old topo
             if not self.state_count_limit:
@@ -306,9 +324,9 @@ class Balancer(object):
             self.statemin_actual_precentage = (self.statemin_actual - self.state_average) * 100 / self.state_average
 
         if not self.par_count:
-            self.par_average = float(total_voters) / self.par_count_limit
+            self.par_average = float(self.total_voters) / self.par_count_limit
         else:
-            self.par_average = float(total_voters) / self.par_count
+            self.par_average = float(self.total_voters) / self.par_count
 
             # for old topo
             if not self.par_count_limit:
@@ -435,5 +453,4 @@ class NodeSTATE(object):
         for k, v in self.adjacent_states:
             self.adjacent_voters.update({(k, k.voters): [(poll, poll.voters) for poll in v].sort(key=lambda x: x.voters)})
 
-    def total_voters(self):
         return sum(poll.voters for poll in self.states)

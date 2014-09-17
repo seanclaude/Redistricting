@@ -157,6 +157,7 @@ class DelimitationToolboxDock(QDockWidget, FORM_CLASS):
             raise Exception("Unknown message type {}".format(message_type))
 
     def statistics_update(self):
+        self.label_total_voters.setText(str(self.balancer_old.total_voters))
         self.label_par_range_old.setText("{:.2f}%/{:.2f}/{:.2f}%"
                                          .format(self.balancer_old.parmin_actual_precentage,
                                                  self.balancer_old.par_average,
@@ -184,8 +185,8 @@ class DelimitationToolboxDock(QDockWidget, FORM_CLASS):
         total = self.balancer_old.get_features_total()
         current = self.balancer_new.get_features_total()
 
-        self.label_par_unused.setText("{}".format(total[0] - current[0]))
-        self.label_state_unused.setText("{}".format(total[1] - current[1]))
+        self.label_live_par.setText("Parliament/{}".format(total[0] - current[0]))
+        self.label_live_state.setText("State/{}".format(total[1] - current[1]))
 
     def live_show(self):
 
@@ -813,7 +814,7 @@ class DelimitationToolboxDock(QDockWidget, FORM_CLASS):
         # extra 2 for unused info rows
         rows = []
         for par in pars:
-            rows.append((par[0], par[1]['states'].keys().__len__(), par[1]['d']))
+            rows.append((par[0], par[1]['states'].keys().__len__(), par[1]['d'], par[1]['voters']))
             for state in sorted(par[1]['states'].items()):
                 rows.append(("", state[0], state[1]))
 
@@ -824,7 +825,7 @@ class DelimitationToolboxDock(QDockWidget, FORM_CLASS):
         row_count = 0
         for row in rows:
             if row[0]:
-                par_cell = QTableWidgetItem("{}\n({})".format(row[0], row[2])), row[1]
+                par_cell = QTableWidgetItem("{}\n{}\n{}".format(row[0], row[3], row[2])), row[1]
             else:
                 if par_cell:
                     self.table_topo.setItem(row_count, 0, QTableWidgetItem(par_cell[0]))
@@ -1042,8 +1043,8 @@ class DelimitationToolboxDock(QDockWidget, FORM_CLASS):
         self.iface.info("{} features found. Balancer started.".format(self.balancer_old.get_features_total()[2]), 4)
 
         # populate best deviation after redraw
-        bestmin, bestmax = self.balancer_old.get_best_deviation()
-        self.label_best_deviation.setText("{:.2f}%/{:.2f}%".format(bestmin, bestmax))
+        #bestmin, bestmax = self.balancer_old.get_best_deviation()
+        #self.label_best_deviation.setText("{:.2f}%/{:.2f}%".format(bestmin, bestmax))
 
         QMessageBox().information(self,
                                   "{} features found. Balancer started.".format(
