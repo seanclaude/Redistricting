@@ -53,38 +53,27 @@ class Colouring(object):
         s = self.graph
         ig = self.id_graph
 
-        nfeatures = features.keys().__len__()
-        nop = nfeatures
-        iop = 0
+        for k1, v1 in features.items():
+            a1 = k1
+            g1 = v1['geom']
 
-        progress = QgisMessageBarProgress("Computing graph ...")
-        try:
-            for k1, v1 in features.items():
-                a1 = k1
-                g1 = v1['geom']
+            # add to graph anyway if node is not connected to anything
+            found_connection = False
+            for k2, v2 in features.items():
+                if k2 == k1:
+                    break
 
-                iop += 1
-                progress.setPercentage(int(100 * iop / nop))
+                g2 = v2['geom']
+                if g1.intersects(g2):
+                    found_connection = True
+                    a2 = k2
+                    s.add_edge(a1, a2)
+                    s.add_edge(a2, a1)
+                    ig.add_edge(k1, k2)
 
-                # add to graph anyway if node is not connected to anything
-                found_connection = False
-                for k2, v2 in features.items():
-                    if k2 == k1:
-                        break
-
-                    g2 = v2['geom']
-                    if g1.intersects(g2):
-                        found_connection = True
-                        a2 = k2
-                        s.add_edge(a1, a2)
-                        s.add_edge(a2, a1)
-                        ig.add_edge(k1, k2)
-
-                if not found_connection:
-                    s.add_edge(a1, a1)
-                    ig.add_edge(a1, a1)
-        finally:
-            progress.close()
+            if not found_connection:
+                s.add_edge(a1, a1)
+                ig.add_edge(a1, a1)
 
     def init_colours(self, features):
         self.compute_graph(features)

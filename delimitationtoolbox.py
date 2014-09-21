@@ -22,14 +22,12 @@
  ***************************************************************************/
 """
 # This will get replaced with a git SHA1 when you do a git archive
-import sys
 from PyQt4.QtCore import QSettings, QTranslator, qVersion, QCoreApplication, Qt
 from PyQt4.QtGui import QAction, QIcon, QMainWindow, QDockWidget
+from configuration import DEBUG
 
 __revision__ = '$Format:%H$'
-__version__ = '0.1.8'
-
-DEBUG = False
+__version__ = '0.1.9'
 
 # Import the code for the dialog
 import resources_rc

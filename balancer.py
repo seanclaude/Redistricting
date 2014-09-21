@@ -21,8 +21,8 @@
 """
 
 import math
+from re import search
 import colouring
-from configuration import Configuration
 from delimitation import LayerType
 from enum import Enum
 from helper.ui import QgisMessageBarProgress, isnull
@@ -40,7 +40,9 @@ class Balancer(object):
                  par_average_target=None,
                  state_average_target=None,
                  par_count_limit=None,
-                 state_count_limit=None):
+                 state_count_limit=None,
+                 state_prefix_format="%02d",
+                 par_prefix_format="%03d"):
 
         self.total_voters = 0
         self.topology_polling = {}
@@ -78,8 +80,8 @@ class Balancer(object):
         self.parmin_actual_precentage = 0.00
 
         self.polling_prefix_format = "%02d"
-        self.state_prefix_format = "%02d"
-        self.par_prefix_format = "%03d"
+        self.state_prefix_format = state_prefix_format
+        self.par_prefix_format = par_prefix_format
 
         # store list of DMs that fits into the normalized range
         self.__successes = {}
@@ -152,27 +154,6 @@ class Balancer(object):
 
         raise Exception("Not implemented")
 
-    def init_prefixes(self, par_attr_format=None, state_attr_format=None):
-        if self.topology_polling.keys().__len__() == 0:
-            return
-
-        ordered = sorted(self.topology_polling.items(),
-                         key=lambda x: (x[1][self.par_field], x[1][self.state_field]))
-
-        if par_attr_format:
-            self.par_prefix_format = par_attr_format
-        else:
-            par_attr = ordered[0][1][self.par_field].rstrip('1')
-            par_intwidth = par_attr.count('0') + 1
-            self.par_prefix_format = "{}%0{}d".format(par_attr.rstrip('0'), par_intwidth)
-
-        if state_attr_format:
-            self.state_prefix_format = state_attr_format
-        else:
-            state_attr = ordered[0][1][self.state_field].rstrip('1')
-            state_intwidth = state_attr.count('0') + 1
-            self.state_prefix_format = "{}%0{}d".format(state_attr.rstrip('0'), state_intwidth)
-
     def init_topology(self):
         self.topology_polling.clear()
 
@@ -183,9 +164,11 @@ class Balancer(object):
 
         for f in self.layer.getFeatures():
             self.topology_polling.update({f.id(): {
-                self.polling_field: [f[self.polling_field], None][bool(isnull(f[self.polling_field]))],
-                self.par_field: [f[self.par_field], None][bool(isnull(f[self.par_field]))],
-                self.state_field: [f[self.state_field], None][bool(isnull(f[self.state_field]))],
+                self.polling_field: None if isnull(f[self.polling_field]) else f[self.polling_field],
+                self.par_field: None if isnull(f[self.par_field]) else int(
+                    search(r'\d+', f[self.par_field]).group()).__str__(),
+                self.state_field: None if isnull(f[self.state_field]) else int(
+                    search(r'\d+', f[self.state_field]).group()).__str__(),
                 self.voters_field: int(f[self.voters_field]),
                 "geom": f.geometryAndOwnership()
             }})
@@ -198,13 +181,12 @@ class Balancer(object):
         for k, v in dict_values.items():
             for k2, v2 in v.items():
                 self.layer.changeAttributeValue(k, self.layer.fieldNameIndex(k2), v2)
-                self.topology_polling[k][k2] = v2
+                self.topology_polling[k][k2] = int(search(r'\d+', v2).group())
 
     def load_topology(self):
         self.topology_state.clear()
         self.topology_par.clear()
         self.init_topology()
-        self.init_prefixes()
 
         for k, v in self.topology_polling.iteritems():
             voters_value = v[self.voters_field]
@@ -229,19 +211,27 @@ class Balancer(object):
         self.init_par_state_map()
 
     def get_colour_by_state(self, attr_value, colour_index):
-        if self.topology_state[attr_value]['voters'] > self.statemax_target:
+        value = self.topology_state.get(attr_value)
+        if not value:
+            return None
+
+        if value['voters'] > self.statemax_target:
             return self.colouring_state.colours_red[colour_index - 1]
 
-        if self.topology_state[attr_value]['voters'] < self.statemin_target:
+        if value['voters'] < self.statemin_target:
             return self.colouring_state.colours_blue[colour_index - 1]
 
         return self.colouring_state.colours_grey[colour_index - 1]
 
     def get_colour_by_parliament(self, attr_value, colour_index):
-        if self.topology_par[attr_value]['voters'] > self.parmax_target:
+        value = self.topology_par.get(attr_value)
+        if not value:
+            return None
+
+        if value['voters'] > self.parmax_target:
             return self.colouring_par.colours_red[colour_index - 1]
 
-        if self.topology_par[attr_value]['voters'] < self.parmin_target:
+        if value['voters'] < self.parmin_target:
             return self.colouring_par.colours_blue[colour_index - 1]
 
         return self.colouring_par.colours_grey[colour_index - 1]
@@ -280,14 +270,25 @@ class Balancer(object):
 
         return (self.topology_par[par_name]['voters'] - self.par_average) * 100 / self.par_average
 
+    def get_par_code_sequence(self):
+        if self.topology_par.keys().__len__():
+            startval = int(min(self.topology_par.keys()))
+        else:
+            startval = 1
+
+        return [p for p in range(startval, startval + self.par_count_limit)]
+
+    def get_state_code_sequence(self):
+        return [s for s in range(1, self.state_count_limit + 1)]
+
     def get_recommendation(self):
         # get min/max for number of state seats in a par
-        seats_state_min = math.floor(1.0*self.state_count_limit/self.par_count_limit)
-        seats_state_max = math.ceil(1.0*self.state_count_limit/self.par_count_limit)
+        seats_state_min = math.floor(1.0 * self.state_count_limit / self.par_count_limit)
+        seats_state_max = math.ceil(1.0 * self.state_count_limit / self.par_count_limit)
         seats_extras = self.state_count_limit % self.par_count_limit
 
         # recommended size (voters)
-
+        # recommended_par
 
 
     def get_state_deviation(self, state_name):
@@ -359,8 +360,13 @@ class Balancer(object):
         voters_state = 0
         voters_par = 0
         voters_selected = 0
+        if current_par:
+            current_par = search(r'\d+', str(current_par)).group()
 
-        for k, v in self.topology_polling.iteritems():
+        if current_state:
+            current_state = search(r'\d+', str(current_state)).group()
+
+        for k, v in self.topology_polling.items():
             voters = v[self.voters_field]
             if k in selected_ids:
                 voters_state += voters
@@ -393,14 +399,15 @@ class Balancer(object):
         return tuple((self.par_count, self.state_count, self.topology_polling.keys().__len__()))
 
     def get_unused(self):
-        pars = [self.par_prefix_format % par for par in range(1, self.par_count_limit + 1)]
-        states = [self.state_prefix_format % state for state in range(1, self.state_count_limit + 1)]
+        pars = [str(p) for p in self.get_par_code_sequence()]
+        states = [str(s) for s in self.get_state_code_sequence()]
         pars_left = set(pars) \
-            .difference([v[self.par_field] for v in self.topology_polling.values()])
+            .difference([str(v[self.par_field]) for v in self.topology_polling.values()])
         states_left = set(states) \
-            .difference([v[self.state_field] for v in self.topology_polling.values()])
+            .difference([str(v[self.state_field]) for v in self.topology_polling.values()])
         return tuple((pars_left, states_left))
 
+    # todo par_new_prefix unused
     def resequence(self, par_new_prefix):
         ordered = sorted(self.topology_polling.items(),
                          key=lambda x: (x[1][self.par_field], x[1][self.state_field]))
@@ -446,11 +453,13 @@ class NodeSTATE(object):
         self.par_current = parid
 
         # get all adjacent POLLs by excluding POLLs in our own STATE
-        self.adjacent_states = dict([(poll, [adj for adj in poll.nodeEdge if adj not in self.states]) for poll in self.states])
+        self.adjacent_states = dict(
+            [(poll, [adj for adj in poll.nodeEdge if adj not in self.states]) for poll in self.states])
 
         # (poll, voters) : sorted[(poll_adj, voters)]
         self.adjacent_voters = {}
         for k, v in self.adjacent_states:
-            self.adjacent_voters.update({(k, k.voters): [(poll, poll.voters) for poll in v].sort(key=lambda x: x.voters)})
+            self.adjacent_voters.update(
+                {(k, k.voters): [(poll, poll.voters) for poll in v].sort(key=lambda x: x.voters)})
 
         return sum(poll.voters for poll in self.states)

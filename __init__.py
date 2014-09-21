@@ -23,7 +23,6 @@
 import os
 import sys
 
-
 def classFactory(iface):  # pylint: disable=invalid-name
     """Load DelimitationToolbox class from file DelimitationToolbox.
 
@@ -40,8 +39,8 @@ def classFactory(iface):  # pylint: disable=invalid-name
     except:
         pass
 
+    import configuration
+    configuration.DEBUG = delimitation_path.find('Debug') != -1
+
     from delimitationtoolbox import DelimitationToolbox
-
-    delimitationtoolbox.DEBUG = delimitation_path.find('Debug') != -1
-
     return DelimitationToolbox(iface)

@@ -467,12 +467,17 @@ class Delimitation(QtCore.QObject):
 
         layers = Layers()
         # extract POLL, STATE and PAR layers
+
         for ltype, lyrs in self.map_layers.items():
             features = []
             for l in lyrs:
                 prod = l.dataProvider()
                 attr_keys = [a.name() for a in prod.fields()]
+                iop = 0
+                totalrows = prod.featureCount()
                 for f in prod.getFeatures():
+                    iop += 1
+                    self.progress.emit(int(100 * iop / totalrows))
                     _, epsg = prod.crs().authid().split(":")
                     new_f = Feature(f.id(), dict(zip(attr_keys, f.attributes())),
                                     f.geometryAndOwnership(),

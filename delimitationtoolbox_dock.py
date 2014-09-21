@@ -28,7 +28,7 @@ import re
 import traceback
 from PyQt4 import uic
 from PyQt4.QtCore import Qt, SIGNAL, QObject, pyqtSignal, QThread
-from PyQt4.QtGui import QComboBox, QDockWidget, QColor, QFileDialog, QMessageBox, QDialog, QTableWidgetItem
+from PyQt4.QtGui import QComboBox, QDockWidget, QColor, QFileDialog, QMessageBox, QDialog, QTableWidgetItem, QLineEdit
 from qgis.core import QgsMessageLog, QgsPalLayerSettings, QgsSymbolV2, QgsRendererCategoryV2, \
     QgsCategorizedSymbolRendererV2, QgsFeatureRequest, QgsFeature, QgsGeometry, QgsExpression, QgsMapLayerRegistry, \
     QgsVectorLayer
@@ -175,19 +175,6 @@ class DelimitationToolboxDock(QDockWidget, FORM_CLASS):
                                                    self.balancer_new.state_average_target,
                                                    self.balancer_new.statemax_actual_precentage))
 
-        self.label_colours_old.setText(
-            "{}/{}".format(self.balancer_old.colouring_par.max_colours,
-                           self.balancer_old.colouring_state.max_colours))
-        self.label_colours_new.setText(
-            "{}/{}".format(self.balancer_new.colouring_par.max_colours,
-                           self.balancer_new.colouring_state.max_colours))
-
-        total = self.balancer_old.get_features_total()
-        current = self.balancer_new.get_features_total()
-
-        self.label_live_par.setText("Parliament/{}".format(total[0] - current[0]))
-        self.label_live_state.setText("State/{}".format(total[1] - current[1]))
-
     def live_show(self):
 
         selectedfeatureids = self.layer.selectedFeaturesIds()
@@ -201,8 +188,8 @@ class DelimitationToolboxDock(QDockWidget, FORM_CLASS):
         voters_selected = totals[2]
 
         # number of state seats in current parliament seat
-        if current_par in balancer.map_par_state:
-            states_per_par = balancer.map_par_state[current_par]['states'].__len__()
+        if str(current_par) in balancer.map_par_state:
+            states_per_par = balancer.map_par_state[str(current_par)]['states'].__len__()
         else:
             states_per_par = "-"
 
@@ -249,6 +236,7 @@ class DelimitationToolboxDock(QDockWidget, FORM_CLASS):
                                                x[1][self.polling_old_fieldname]))
         par_format = self.balancer_new.par_prefix_format
         state_format = self.balancer_new.state_prefix_format
+        poll_format = self.balancer_new.polling_prefix_format
         regexp = "(\d+)"
         base_par = int(re.match(regexp, attributes_old[0][1][self.par_old_fieldname], re.I).group(1))
 
@@ -260,7 +248,7 @@ class DelimitationToolboxDock(QDockWidget, FORM_CLASS):
             old_polling = int(re.match(regexp, row[1][self.polling_old_fieldname], re.I).group(1))
             new_par = par_format % (old_par - base_par + 1)
             new_state = state_format % old_state
-            new_polling = old_polling
+            new_polling = poll_format % old_polling
 
             self.balancer_new.update_topology(
                 {row[0]: {
@@ -269,9 +257,7 @@ class DelimitationToolboxDock(QDockWidget, FORM_CLASS):
                     self.polling_new_fieldname: new_polling}})
 
         self.layer.commitChanges()
-        self.balancer_new.load_topology()
-        self.balancer_new.init_colouring()
-
+        self.layer_redraw(True)
         self.iface.info("Done")
 
     def fields_reset(self):
@@ -290,7 +276,8 @@ class DelimitationToolboxDock(QDockWidget, FORM_CLASS):
             self.layer.changeAttributeValue(k, self.layer.fieldNameIndex(self.par_new_fieldname), None)
 
         self.layer.commitChanges()
-        self.balancer_new.load_topology()
+        self.layer_redraw(True)
+        self.iface.info("Done")
 
     def label_handler(self):
         self.label_update()
@@ -310,7 +297,7 @@ class DelimitationToolboxDock(QDockWidget, FORM_CLASS):
         if self.cb_feature_id.isChecked():
             expr.append("""CASE
                     WHEN
-                        {0} IS NULL or {1} IS NULL THEN '.'
+                        {0} IS NULL or {1} IS NULL THEN ''
                         ELSE concat(toint(regexp_substr({0}, '(\\\d+)')),'/',toint(regexp_substr({1}, '(\\\d+)')))
                     END""".format(balancer.par_field, balancer.state_field))
 
@@ -339,6 +326,9 @@ class DelimitationToolboxDock(QDockWidget, FORM_CLASS):
         for widget in self.findChildren(QComboBox):
             saved_state.update({widget.objectName(): widget.currentIndex()})
 
+        for widget in self.findChildren(QLineEdit):
+            saved_state.update({widget.objectName(): widget.text()})
+
         Configuration().store_qt(Configuration.UI_STATE, json.dumps(saved_state))
 
     def combobox_state_load(self, excludes=None):
@@ -352,6 +342,10 @@ class DelimitationToolboxDock(QDockWidget, FORM_CLASS):
         for widget in self.findChildren(QComboBox):
             if widget.objectName() in saved_state and widget.objectName() not in excludes:
                 widget.setCurrentIndex(saved_state[widget.objectName()])
+
+        for widget in self.findChildren(QLineEdit):
+            if widget.objectName() in saved_state and widget.objectName() not in excludes:
+                widget.setText(saved_state[widget.objectName()])
 
     def layer_changed(self):
         self.layer = None
@@ -425,11 +419,13 @@ class DelimitationToolboxDock(QDockWidget, FORM_CLASS):
             # new map, need to reload
             balancer = self.balancer_new
             balancer.load_topology()
+            balancer.init_colouring()
 
         seat_type = self.selector_seat_type.currentIndex()
         if seat_type == 0:
             # state
             get_colour_method = balancer.get_colour_by_state
+            attr_prefix = balancer.state_prefix_format
             attr_name = balancer.state_field
             colouring = balancer.colouring_state
             self.label_live_state.setBold(True)
@@ -437,6 +433,7 @@ class DelimitationToolboxDock(QDockWidget, FORM_CLASS):
         else:
             # par
             get_colour_method = balancer.get_colour_by_parliament
+            attr_prefix = balancer.par_prefix_format
             attr_name = balancer.par_field
             colouring = balancer.colouring_par
             self.label_live_state.setBold(False)
@@ -478,9 +475,13 @@ class DelimitationToolboxDock(QDockWidget, FORM_CLASS):
                 self.iface.warning("That analysis option is not available yet")
                 return
 
+            if not colour:
+                continue
+
             symbol = QgsSymbolV2.defaultSymbol(geomtype)
             symbol.setColor(QColor(colour.hex))
-            category = QgsRendererCategoryV2(k, symbol, k)
+            val = attr_prefix % int(k)
+            category = QgsRendererCategoryV2(val, symbol, val)
             categories.append(category)
 
         # create the renderer and assign it to a layer
@@ -509,7 +510,7 @@ class DelimitationToolboxDock(QDockWidget, FORM_CLASS):
         state_used = [v[self.state_new_fieldname] for v in self.balancer_new.topology_polling.values()]
 
         if set(par_used).__len__() > self.balancer_old.par_count or \
-           set(state_used).__len__() > self.balancer_old.state_count:
+                        set(state_used).__len__() > self.balancer_old.state_count:
             self.iface.error("Allocation limit exceeded")
             self.layer.rollBack()
             return
@@ -530,7 +531,7 @@ class DelimitationToolboxDock(QDockWidget, FORM_CLASS):
 
         if current_state and current_par:
             ids = [int(k) for k, v in balancer.topology_polling.items()
-                   if v[par_field] == current_par and v[state_field] == current_state]
+                   if v[par_field] == str(current_par) and v[state_field] == str(current_state)]
 
             if set(ids) \
                     .difference(self.layer.selectedFeaturesIds()) \
@@ -578,13 +579,19 @@ class DelimitationToolboxDock(QDockWidget, FORM_CLASS):
             balancer = self.get_balancer()
 
             self.tab_rebalance.setCurrentIndex(1)
-            selector_par_index = self.selector_par.findData(changed_feature[balancer.par_field])
-            if selector_par_index != -1:
-                self.selector_par.setCurrentIndex(selector_par_index)
+            raw_par = changed_feature[balancer.par_field]
+            if raw_par:
+                par_val = int(re.search(r'\d+', raw_par).group())
+                selector_par_index = self.selector_par.findData(par_val)
+                if selector_par_index != -1:
+                    self.selector_par.setCurrentIndex(selector_par_index)
 
-            selector_state_index = self.selector_state.findData(changed_feature[balancer.state_field])
-            if selector_state_index != -1:
-                self.selector_state.setCurrentIndex(selector_state_index)
+            raw_state = changed_feature[balancer.state_field]
+            if raw_state:
+                state_val = int(re.search(r'\d+', raw_state).group())
+                selector_state_index = self.selector_state.findData(state_val)
+                if selector_state_index != -1:
+                    self.selector_state.setCurrentIndex(selector_state_index)
 
             self.live_show()
         else:
@@ -603,12 +610,14 @@ class DelimitationToolboxDock(QDockWidget, FORM_CLASS):
             self.iface.warning("Not allowed to modify old location codes. Select new map to assign new location codes.")
             return
 
-        current_state = self.selector_state.itemData(self.selector_state.currentIndex())
-        current_par = self.selector_par.itemData(self.selector_par.currentIndex())
+        current_state = self.balancer_new.state_prefix_format % self.selector_state.itemData(
+            self.selector_state.currentIndex())
+        current_par = self.balancer_new.par_prefix_format % self.selector_par.itemData(self.selector_par.currentIndex())
 
         confirmation = QMessageBox.question(self,
                                             "Confirm action",
-                                            "Add selection to {}/{}?".format(current_par, current_state),
+                                            "Add selection to the following constituencies?\n" +
+                                            "Parliament:{}\nState:{}".format(current_par, current_state),
                                             QMessageBox.Yes | QMessageBox.No)
         if confirmation == QMessageBox.Yes:
             self.layer.startEditing()
@@ -616,7 +625,8 @@ class DelimitationToolboxDock(QDockWidget, FORM_CLASS):
             for f in self.layer.selectedFeatures():
                 updates.append((f[self.par_new_fieldname], f[self.state_new_fieldname]))
                 self.balancer_new.update_topology(
-                    {f.id(): {self.state_new_fieldname: current_state, self.par_new_fieldname: current_par}})
+                    {f.id(): {self.state_new_fieldname: current_state,
+                              self.par_new_fieldname: current_par}})
 
             # renumber POLLs in the changed
             for entry in updates:
@@ -627,13 +637,14 @@ class DelimitationToolboxDock(QDockWidget, FORM_CLASS):
                             entry[1])
                 req = QgsFeatureRequest(QgsExpression(filter_expression))
                 for i, f in enumerate(self.layer.getFeatures(req)):
-                    self.balancer_new.update_topology({f.id(): {self.polling_new_fieldname: "%02d" % (i + 1)}})
+                    self.balancer_new.update_topology(
+                        {f.id(): {self.polling_new_fieldname: self.balancer_new.polling_prefix_format % (i + 1)}})
 
             self.layer.commitChanges()
             self.selection_clear()
             self.statistics_update()
-            self.balancer_new.load_topology()
-            self.balancer_new.init_colouring()
+            # self.balancer_new.load_topology()
+            # self.balancer_new.init_colouring()
             self.layer_redraw(False)
 
             self.iface.info("Selected features updated")
@@ -747,7 +758,7 @@ class DelimitationToolboxDock(QDockWidget, FORM_CLASS):
 
         self.worker.moveToThread(self.thread)
         self.worker.finished.connect(self.generator_end)
-        #self.worker.error.connect(self.generator_error)
+        # self.worker.error.connect(self.generator_error)
         self.worker.message.connect(self.messsage_handler)
         try:
             self.progressBar = QgisMessageBarProgress()
@@ -811,15 +822,15 @@ class DelimitationToolboxDock(QDockWidget, FORM_CLASS):
             balancer = self.balancer_new
 
         pars = sorted(balancer.map_par_state.items())
-        # extra 2 for unused info rows
         rows = []
         for par in pars:
             rows.append((par[0], par[1]['states'].keys().__len__(), par[1]['d'], par[1]['voters']))
             for state in sorted(par[1]['states'].items()):
                 rows.append(("", state[0], state[1]))
 
+        # extra 2 for unused info rows and +1 for header row
+        self.table_topo.setRowCount(1)
         self.table_topo.setRowCount(rows.__len__() - balancer.map_par_state.keys().__len__() + 2)
-        self.table_topo.clearContents()
 
         par_cell = None
         row_count = 0
@@ -838,15 +849,20 @@ class DelimitationToolboxDock(QDockWidget, FORM_CLASS):
 
         unused_header = QTableWidgetItem("Unused codes")
         unused_header.setTextAlignment(Qt.AlignHCenter | Qt.AlignVCenter)
-        self.table_topo.setItem(self.table_topo.rowCount() - 2, 0, unused_header)
-        self.table_topo.setSpan(self.table_topo.rowCount() - 2, 0, 1, 3)
+        self.table_topo.setItem(row_count, 0, unused_header)
+        self.table_topo.setSpan(row_count, 0, 1, 3)
 
+        row_count += 1
         unused_totals = balancer.get_unused()
-        par_cell = QTableWidgetItem(", ".join(unused_totals[0]))
-        self.table_topo.setItem(self.table_topo.rowCount() - 1, 0, par_cell)
+        if unused_totals[0].__len__() == 0:
+            par_cell = QTableWidgetItem('')
+        else:
+            par_cell = QTableWidgetItem(", ".join(unused_totals[0]))
+        self.table_topo.setItem(row_count, 0, par_cell)
 
         state_cell = QTableWidgetItem(", ".join(unused_totals[1]))
-        self.table_topo.setItem(self.table_topo.rowCount() - 1, 1, state_cell)
+        self.table_topo.setItem(row_count, 1, state_cell)
+        self.table_topo.setItem(row_count, 2, QTableWidgetItem(''))
 
         self.iface.info("Allocation table refreshed")
 
@@ -909,7 +925,7 @@ class DelimitationToolboxDock(QDockWidget, FORM_CLASS):
 
         filepath, layerid = self.layer.dataProvider().dataSourceUri().split("|")
         path, filename = os.path.split(filepath)
-        self.worker = Delimitation(self.selector_target_state.currentText(), path)
+        self.worker = Delimitation(self.selector_target_state.currentText(), path, path)
 
         # set the temp layer as currently loaded layer
         self.worker.master_layer = self.layer
@@ -926,7 +942,7 @@ class DelimitationToolboxDock(QDockWidget, FORM_CLASS):
 
         self.worker.moveToThread(self.thread)
         self.worker.finished.connect(self.generator_end)
-        #self.worker.error.connect(self.generator_error)
+        # self.worker.error.connect(self.generator_error)
         self.worker.message.connect(self.messsage_handler)
 
         try:
@@ -975,23 +991,29 @@ class DelimitationToolboxDock(QDockWidget, FORM_CLASS):
             self.iface.error("Some fields are unspecified")
             return
 
-        self.balancer_old = Balancer(self.layer,
-                                     self.voters_fieldname,
-                                     self.polling_old_fieldname,
-                                     self.state_old_fieldname,
-                                     self.par_old_fieldname,
-                                     delta)
+        try:
+            self.balancer_old = Balancer(self.layer,
+                                         self.voters_fieldname,
+                                         self.polling_old_fieldname,
+                                         self.state_old_fieldname,
+                                         self.par_old_fieldname,
+                                         delta)
 
-        self.balancer_new = Balancer(self.layer,
-                                     self.voters_fieldname,
-                                     self.polling_new_fieldname,
-                                     self.state_new_fieldname,
-                                     self.par_new_fieldname,
-                                     delta,
-                                     self.balancer_old.par_average,
-                                     self.balancer_old.state_average,
-                                     self.balancer_old.par_count,
-                                     self.balancer_old.state_count)
+            self.balancer_new = Balancer(self.layer,
+                                         self.voters_fieldname,
+                                         self.polling_new_fieldname,
+                                         self.state_new_fieldname,
+                                         self.par_new_fieldname,
+                                         delta,
+                                         self.balancer_old.par_average,
+                                         self.balancer_old.state_average,
+                                         self.balancer_old.par_count,
+                                         self.balancer_old.state_count,
+                                         state_prefix_format="N%03d",
+                                         par_prefix_format="{}%02d".format(self.par_new_prefix))
+        except ValueError:
+            self.iface.error("The specified voters field is not a number")
+            return
 
         QObject.connect(self.clickTool,
                         SIGNAL("canvasClicked(const QgsPoint &, Qt::MouseButton)"),
@@ -1043,8 +1065,8 @@ class DelimitationToolboxDock(QDockWidget, FORM_CLASS):
         self.iface.info("{} features found. Balancer started.".format(self.balancer_old.get_features_total()[2]), 4)
 
         # populate best deviation after redraw
-        #bestmin, bestmax = self.balancer_old.get_best_deviation()
-        #self.label_best_deviation.setText("{:.2f}%/{:.2f}%".format(bestmin, bestmax))
+        # bestmin, bestmax = self.balancer_old.get_best_deviation()
+        # self.label_best_deviation.setText("{:.2f}%/{:.2f}%".format(bestmin, bestmax))
 
         QMessageBox().information(self,
                                   "{} features found. Balancer started.".format(
@@ -1058,13 +1080,18 @@ class DelimitationToolboxDock(QDockWidget, FORM_CLASS):
         self.selector_par.clear()
         balancer = self.get_balancer()
 
-        for s in range(1, balancer.state_count_limit + 1):
-            state = balancer.state_prefix_format % s
-            self.selector_state.addItem(state, state)
+        for s in balancer.get_state_code_sequence():
+            self.selector_state.addItem(balancer.state_prefix_format % s, s)
 
-        for p in range(1, balancer.par_count_limit + 1):
-            par = balancer.par_prefix_format % p
-            self.selector_par.addItem(par, par)
+        for p in balancer.get_par_code_sequence():
+            self.selector_par.addItem(balancer.par_prefix_format % p, p)
+
+        # update unused codes
+        total = self.balancer_old.get_features_total()
+        current = self.balancer_new.get_features_total()
+
+        self.label_live_par.setText("Parliament/{}".format(total[0] - current[0]))
+        self.label_live_state.setText("State/{}".format(total[1] - current[1]))
 
     def balancer_stop(self):
         if not self.balancer_started:
