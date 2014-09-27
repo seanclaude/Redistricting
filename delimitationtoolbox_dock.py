@@ -734,6 +734,10 @@ class DelimitationToolboxDock(QDockWidget, FORM_CLASS):
         layer = QgsVectorLayer(os.path.join(src_dir, shapefiles[0]), self.selector_target_state.currentText(), "ogr")
         field_values = {}
         for f in layer.getFeatures():
+            if f.fieldNameIndex(match_feat_name) == -1:
+                self.messsage_handler(MessageType.Fail,
+                                      "The field '{}' does not exist in Feature {}".format(match_feat_name, f.id()))
+                return
             field_values.setdefault(f[match_feat_name], []).append(f.id())
 
         duplicates = []
@@ -794,6 +798,8 @@ class DelimitationToolboxDock(QDockWidget, FORM_CLASS):
         opened = {}
         for f in files:
             for lyr in self.canvas.layers():
+                if lyr.type() != lyr.VectorLayer:
+                    continue
                 lyr_path, _ = lyr.dataProvider().dataSourceUri().split("|")
                 if f == os.path.normpath(lyr_path):
                     opened.update({lyr.id(): lyr_path})

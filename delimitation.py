@@ -22,6 +22,7 @@
 """
 import traceback
 from PyQt4 import QtCore
+from PyQt4.QtCore import QVariant
 import ogr
 import osr
 from colouring import Colouring
@@ -34,7 +35,7 @@ from enum import Enum
 from qgis.core import QgsVectorLayer, QgsFeature, QgsVectorFileWriter, QgsGeometry, QgsMapLayerRegistry
 from helper.qgis_util import get_spatialreference
 from lxml import etree
-from configuration import Configuration
+from configuration import Configuration, DEBUG
 from packages.pykml.factory import KML_ElementMaker as KML
 from packages.pykml.factory import GX_ElementMaker as GX
 from helper.ui import open_folder, MessageType
@@ -195,7 +196,7 @@ class Feature(ShapeFileBase):
 
 class Delimitation(QtCore.QObject):
     finished = QtCore.pyqtSignal(object)
-    #error = QtCore.pyqtSignal(Exception, basestring)
+    # error = QtCore.pyqtSignal(Exception, basestring)
     progress = QtCore.pyqtSignal(float)
     message = QtCore.pyqtSignal(Enum, basestring)
 
@@ -222,6 +223,43 @@ class Delimitation(QtCore.QObject):
     def __get_output_file(self, prefix=""):
         return os.path.join(self.__output_directory, "{}{}.shp".format(prefix, self.__working_name))
 
+    def __get_fieldtypes2(self, ref_fields, attributes=None):
+        fields = []
+        fields_map = {}
+        map(lambda y: fields_map.update({y.name(): y}), ref_fields)
+        if not attributes:
+            attributes = [x.name() for x in ref_fields]
+        for attr_name in attributes:
+            x = fields_map[attr_name]
+
+            if x.type() == QVariant.Double:
+                fieldtype = "double({},{})".format(x.length(), x.precision())
+            elif x.type() == QVariant.Int:
+                fieldtype = "integer({})".format(max(10, x.length()))
+            else:
+                fieldtype = "string({})".format(max(120, x.length()))
+
+            fields.append("field={}:{}".format(attr_name, fieldtype))
+
+        return fields
+
+    def __get_fieldtypes(self, data_map, attribute_list=None):
+
+        if not attribute_list:
+            attribute_list = self.__all_attribute_fieldnames
+
+        fieldstrings = ["index=yes"]
+        for fname in attribute_list:
+            if data_map[fname].isdigit():
+                fieldstrings.append("field={}:integer({})".format(fname, max(10, data_map[fname].__len__())))
+            elif re.match("^\d+?\.\d+?$", data_map[fname]):
+                l, r = data_map[fname].split('.')
+                fieldstrings.append("field={}:double({},{})".format(fname, len(l) + len(r), len(r)))
+            else:
+                fieldstrings.append("field={}:string({})".format(fname, max(120, data_map[fname].__len__())))
+
+        return fieldstrings
+
     def __create_master_layer(self, filepath):
         src_filepath = filepath
         if not os.path.isabs(src_filepath):
@@ -234,35 +272,35 @@ class Delimitation(QtCore.QObject):
         csvfilename = glob.glob1(self.__input_directory, '*.csv')[0]
         csvfile_abs = os.path.join(self.__input_directory, csvfilename)
 
-        # we need to also add all attributes in both State and Parliamentary map_layers
-        # because we obtain value from POLL layer when merging
-        for layertype in LayerType:
-            self.__all_attribute_fieldnames.update(Configuration().read(layertype.name, "attributes"))
-
-        authid = input_layer.dataProvider().crs().authid()
-        if not authid:
-            raise Exception("Unable to determine EPSG for {}".format(src_filepath))
-        fieldstrings = ["field={}:string(120)".format(x) for x in self.__all_attribute_fieldnames]
-        fieldstrings.append("index=yes")
-
-        # create temp layer
-        self.master_layer = QgsVectorLayer("Polygon?crs={}&{}".format(authid, "&".join(fieldstrings)),
-                                           "temporary_layer",
-                                           "memory")
-
         # read csv into a dict first
         iop = 0
         csv_map = {}
         key_columns = Configuration().read("CSV", "columns")
 
         with open(csvfile_abs, "rb") as csvfile:
-            reader = csv.DictReader(csvfile, delimiter=',', quoting=csv.QUOTE_NONE)
+            reader = csv.DictReader(csvfile, delimiter=',', quoting=csv.QUOTE_ALL)
             rows = list(reader)
             totalrows = len(rows)
             for row in rows:
                 iop += 1
                 self.progress.emit(int(100 * iop / totalrows))
                 csv_map.update({tuple([row[k] for k in key_columns]): row})
+
+        # we need to also add all attributes in both State and Parliamentary map_layers
+        # because we obtain value from POLL layer when merging
+        for layertype in LayerType:
+            self.__all_attribute_fieldnames.update(Configuration().read(layertype.name, "attributes"))
+
+        fieldstrings = self.__get_fieldtypes(csv_map.values()[0])
+
+        authid = input_layer.dataProvider().crs().authid()
+        if not authid:
+            raise Exception("Unable to determine EPSG for {}".format(src_filepath))
+
+        # create temp layer
+        self.master_layer = QgsVectorLayer("Polygon?crs={}&{}".format(authid, "&".join(fieldstrings)),
+                                           "temporary_layer",
+                                           "memory")
 
         # go thru each polygon
         match_feat_name = Configuration().read("CSV", "field")
@@ -271,6 +309,7 @@ class Delimitation(QtCore.QObject):
                           .format(", ".join(key_columns), csvfilename, match_feat_name, filepath))
 
         nop = csv_map.__len__()
+        iop = 0
         master_provider = self.master_layer.dataProvider()
         try:
             for f in input_layer.getFeatures():
@@ -326,7 +365,8 @@ class Delimitation(QtCore.QObject):
         vprovider = input_layer.dataProvider()
         nfeat = vprovider.featureCount()
         dissolve_field_index = input_layer.fieldNameIndex(dissolve_fieldname)
-        fields = ["field={}:string(120)".format(x.name()) for x in vprovider.fields()]
+
+        fields = self.__get_fieldtypes2(vprovider.fields())
         fields.append("index=yes")
         authid = vprovider.crs().authid()
         if not authid:
@@ -399,14 +439,14 @@ class Delimitation(QtCore.QObject):
         try:
             if outputflag == OutputFlag.Shapefile_KML:
                 self.generate_vector_file(LayerType.Polling, True)
-                self.generate_vector_file(LayerType.State)
-                self.generate_vector_file(LayerType.Parliament)
+                self.generate_vector_file(LayerType.State, True)
+                self.generate_vector_file(LayerType.Parliament, True)
                 self.generate_kml()
             elif outputflag == OutputFlag.Shapefile:
                 self.generate_vector_file(LayerType.Polling, True)
             elif outputflag == OutputFlag.KML_ONLY:
-                self.generate_vector_file(LayerType.State)
-                self.generate_vector_file(LayerType.Parliament)
+                self.generate_vector_file(LayerType.State, True)
+                self.generate_vector_file(LayerType.Parliament, True)
                 self.generate_kml()
             else:
                 raise Exception('Unknown output type')
@@ -422,18 +462,20 @@ class Delimitation(QtCore.QObject):
                 src_dir = Configuration().read_qt(Configuration.SRC_DIR)
                 shapefiles = glob.glob1(src_dir, '*.shp')
                 self.__create_master_layer(shapefiles[0])
-                src_layer = self.master_layer
+
+            src_layer = self.master_layer
 
         if layertype == LayerType.State or layertype == LayerType.Parliament:
             src_layer = self.__merge_polygons(layertype)
 
-        fields_uri = ["field={}:string(120)".format(x) for x in Configuration().read(layertype.name, "attributes")]
-        fields_uri.append("index=yes")
+        fields = self.__get_fieldtypes2(src_layer.dataProvider().fields(),
+                                        Configuration().read(layertype.name, "attributes"))
+        fields.append("index=yes")
         self.message.emit(MessageType.Normal, "Generating {} layer ...".format(layertype.name))
         authid = src_layer.dataProvider().crs().authid()
         if not authid:
             raise Exception("Unable to determine EPSG for {}".format(src_layer.dataProvider().name()))
-        out_layer = QgsVectorLayer("Polygon?crs={}&{}".format(authid, "&".join(fields_uri)),
+        out_layer = QgsVectorLayer("Polygon?crs={}&{}".format(authid, "&".join(fields)),
                                    "temporary_generate_{}".format(layertype.name),
                                    "memory")
         out_provider = out_layer.dataProvider()
@@ -467,17 +509,14 @@ class Delimitation(QtCore.QObject):
 
         layers = Layers()
         # extract POLL, STATE and PAR layers
-
+        totalrows = 0
         for ltype, lyrs in self.map_layers.items():
             features = []
             for l in lyrs:
                 prod = l.dataProvider()
                 attr_keys = [a.name() for a in prod.fields()]
-                iop = 0
-                totalrows = prod.featureCount()
+                totalrows += prod.featureCount()
                 for f in prod.getFeatures():
-                    iop += 1
-                    self.progress.emit(int(100 * iop / totalrows))
                     _, epsg = prod.crs().authid().split(":")
                     new_f = Feature(f.id(), dict(zip(attr_keys, f.attributes())),
                                     f.geometryAndOwnership(),
@@ -537,6 +576,7 @@ class Delimitation(QtCore.QObject):
                 poll_folder = folder
 
         # now we populate the folders
+        iop = 0
         state_index = 0
         poll_index = 0
         for par in layers.features[LayerType.Parliament]:
@@ -572,8 +612,8 @@ class Delimitation(QtCore.QObject):
                     poll = polllist[j]
                     if poll.attributes[field_match_par] == \
                             par.attributes[field_match_par] and \
-                                    poll.attributes[field_match_state] == \
-                                    state.attributes[field_match_state]:
+                            poll.attributes[field_match_state] == \
+                            state.attributes[field_match_state]:
                         polls.append(poll)
                     else:
                         break
@@ -587,10 +627,8 @@ class Delimitation(QtCore.QObject):
                 polls.sort(key=Layers.sortkey_expression(LayerType.Polling))
                 for poll in polls:
                     poll_state_folder.append(poll.export_as_placemark(fillcolour=state_colour))
-
-        # validate kml
-        # if sys.flags.debug:
-        # self.__validate_kml()
+                    iop += 1
+                    self.progress.emit(int(100 * iop / totalrows))
 
         # save to disk
         with open("doc.kml", "w") as txt_file:
