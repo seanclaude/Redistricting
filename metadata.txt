@@ -1,0 +1,13 @@
+[general]
+name=Delimitation Toolbox
+qgisMinimumVersion=2.0
+description=Various tools for electorate boundary delimitation. Include attribute inserter, KML file generation and styling. A redistricting and rebalancing tool is included as well.
+version=0.1.9
+author=Sean Lin
+email=seanlinmt@clearpixels.co.nz
+tags=vector, districting, politics, electorate
+homepage=https://github.com/seanlinmt/DelimitationToolbox
+repository=https://github.com/seanlinmt/DelimitationToolbox
+experimental=False
+deprecated=False
+icon=icon.png

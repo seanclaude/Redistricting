@@ -800,7 +800,11 @@ class DelimitationToolboxDock(QDockWidget, FORM_CLASS):
             for lyr in self.canvas.layers():
                 if lyr.type() != lyr.VectorLayer:
                     continue
-                lyr_path, _ = lyr.dataProvider().dataSourceUri().split("|")
+
+                lyr_path = lyr.dataProvider().dataSourceUri()
+                if lyr_path.find('|') != -1:
+                    lyr_path, _ = lyr_path.split("|")
+
                 if f == os.path.normpath(lyr_path):
                     opened.update({lyr.id(): lyr_path})
 
