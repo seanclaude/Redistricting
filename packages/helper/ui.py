@@ -3,16 +3,13 @@ import os
 import random
 import subprocess
 import sys
+from qgis.gui import QgsMessageBar
+from qgis.utils import iface
 from PyQt4.QtCore import Qt
 from PyQt4.QtGui import QBrush, QListWidget, QListWidgetItem, QLabel, QProgressBar
 from enum import Enum
 from helper.string import remove_tags
 from helper.extensions import attach_method
-from qgis.utils import iface
-from qgis.gui import QgsMessageBar
-
-__author__ = 'sean'
-
 from PyQt4 import QtCore
 
 try:

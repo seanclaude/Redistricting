@@ -1,5 +1,5 @@
 <RCC>
-    <qresource prefix="/plugins/DelimitationToolboxDebug" >
+    <qresource prefix="/plugins/DelimitationToolbox" >
         <file>icon.png</file>
     </qresource>
 </RCC>

@@ -21,10 +21,11 @@
  ***************************************************************************/
 """
 import traceback
+from qgis.core import *
 from PyQt4 import QtCore
 from PyQt4.QtCore import QVariant
-import ogr
-import osr
+from osgeo import ogr
+from osgeo import osr
 from colouring import Colouring
 import os
 from zipfile import ZipFile
@@ -32,16 +33,16 @@ import csv
 import glob
 import re
 from enum import Enum
-from qgis.core import QgsVectorLayer, QgsFeature, QgsVectorFileWriter, QgsGeometry, QgsMapLayerRegistry
 from helper.qgis_util import get_spatialreference
+from configuration import Configuration
 from lxml import etree
-from configuration import Configuration, DEBUG
+
 from packages.pykml.factory import KML_ElementMaker as KML
 from packages.pykml.factory import GX_ElementMaker as GX
 from helper.ui import open_folder, MessageType
 
-# ogr.UseExceptions()
-# osr.UseExceptions()
+ogr.UseExceptions()
+osr.UseExceptions()
 
 
 class OutputFlag(Enum):

@@ -1,7 +1,4 @@
-from lxml import etree
-
-__author__ = 'sean'
-
+from xml import etree
 
 # https://gist.github.com/dolph/1792904
 def serialize(d):

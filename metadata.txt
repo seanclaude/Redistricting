@@ -1,13 +1,15 @@
 [general]
 name=Delimitation Toolbox
-qgisMinimumVersion=2.0
-description=Various tools for electorate boundary delimitation. Include attribute inserter, KML file generation and styling. A redistricting and rebalancing tool is included as well.
-version=0.1.9
+qgisMinimumVersion=2.2
+about=Various tools for getting GIS files ready for analysis and presentation. Rebalancer uses the Tindak Malaysia (tindakmalaysia.org) method of constituency equalisation.
+description=Features include CSV attribute insertion, KML file generation/styling and a graphical redistricting and voter/demographic rebalancing tool.
+version=0.1.10
 author=Sean Lin
 email=seanlinmt@clearpixels.co.nz
-tags=vector, districting, politics, electorate
+tags=vector, districting, politics, CSV, KML, delimitation
 homepage=https://github.com/seanlinmt/DelimitationToolbox
 repository=https://github.com/seanlinmt/DelimitationToolbox
+tracker=https://github.com/seanlinmt/DelimitationToolbox/issues
 experimental=False
 deprecated=False
 icon=icon.png

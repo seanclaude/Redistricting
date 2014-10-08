@@ -26,19 +26,19 @@ import glob
 import json
 import re
 import traceback
-from PyQt4 import uic
-from PyQt4.QtCore import Qt, SIGNAL, QObject, pyqtSignal, QThread
-from PyQt4.QtGui import QComboBox, QDockWidget, QColor, QFileDialog, QMessageBox, QDialog, QTableWidgetItem, QLineEdit
 from qgis.core import QgsMessageLog, QgsPalLayerSettings, QgsSymbolV2, QgsRendererCategoryV2, \
     QgsCategorizedSymbolRendererV2, QgsFeatureRequest, QgsFeature, QgsGeometry, QgsExpression, QgsMapLayerRegistry, \
     QgsVectorLayer
 from qgis.gui import *
+from PyQt4 import uic
+from PyQt4.QtCore import Qt, SIGNAL, QObject, pyqtSignal, QThread
+from PyQt4.QtGui import QComboBox, QDockWidget, QColor, QFileDialog, QMessageBox, QDialog, QTableWidgetItem, QLineEdit
 from configuration import *
 import configuration
 from helper.qgis_util import extend_qgis_interface, delete_shapefile
 from helper.string import parse_float
 from helper.ui import extend_qt_list_widget, MessageType, extend_qlabel_setbold, QgisMessageBarProgress
-from delimitation import Delimitation, LayerType, OutputFlag
+from delimitation import Delimitation, LayerType
 from balancer import Balancer
 
 

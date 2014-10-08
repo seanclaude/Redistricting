@@ -24,10 +24,9 @@
 # This will get replaced with a git SHA1 when you do a git archive
 from PyQt4.QtCore import QSettings, QTranslator, qVersion, QCoreApplication, Qt
 from PyQt4.QtGui import QAction, QIcon, QMainWindow, QDockWidget
-from configuration import DEBUG
 
 __revision__ = '$Format:%H$'
-__version__ = '0.1.9'
+__version__ = '0.1.10'
 
 # Import the code for the dialog
 import resources_rc
@@ -36,8 +35,8 @@ import os.path
 
 
 class DelimitationToolbox:
-    __pname__ = ''
-    __modname__ = ''
+    __pname__ = 'Delimitation Toolbox'
+    __modname__ = 'DelimitationToolbox'
 
     def __init__(self, iface):
         """Constructor.
@@ -47,13 +46,6 @@ class DelimitationToolbox:
             application at run time.
         :type iface: QgsInterface
         """
-
-        if DEBUG:
-            DelimitationToolbox.__pname__ = 'Delimitation Toolbox Debug'
-            DelimitationToolbox.__modname__ = 'DelimitationToolboxDebug'
-        else:
-            DelimitationToolbox.__pname__ = 'Delimitation Toolbox'
-            DelimitationToolbox.__modname__ = 'DelimitationToolbox'
 
         # Save reference to the QGIS interface
         self.iface = iface
