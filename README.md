@@ -3,7 +3,7 @@ A QGIS plugin containing various GIS Tools for electoral delimitation. Features 
 - insertion of attributes from CSV to ESRI Shapefile
 - Generation of Google Earth KMZ file
 - Styling of KML file
-- GUI for electoral constituency rebalancing using Tindak Malaysia's method of equalisation
+- GUI for electoral constituency rebalancing using [Tindak Malaysia's](http://www.tindakmalaysia.org "Tindak Malaysia's homepage") method of equalisation
 
 
 ## Dependencies
@@ -21,7 +21,7 @@ Install QGIS using the OSGEO4W installer. Select the modules **qgis** and **qgis
 You will just need to install the **lxml** module either using pip or easy_install.
 
 #### For windows:
-The easiest method of installing the dependencies is to install the **python-win32** module via the OSGE4W installer. The precompiled binaries for the **lxml** module is available at  http://www.lfd.uci.edu/~gohlke/pythonlibs/#lxml. Depending on the whether you've installed the 32-bit or 64-bit of QGIS, the files to download are http://www.lfd.uci.edu/~gohlke/pythonlibs/ansi47vi/lxml-3.3.6.win-amd64-py2.7.exe (64-bit) or http://www.lfd.uci.edu/~gohlke/pythonlibs/ansi47vi/lxml-3.3.6.win32-py2.7.exe (32-bit).
+The easiest method of installing the dependencies is to install the **python-win32** module via the OSGE4W installer. The precompiled binaries for the **lxml** module is available athttp://www.lfd.uci.edu/~gohlke/pythonlibs/#lxml. Depending on the whether you've installed the 32-bit or 64-bit of QGIS, the files to download are http://www.lfd.uci.edu/~gohlke/pythonlibs/ansi47vi/lxml-3.3.6.win-amd64-py2.7.exe (64-bit) or http://www.lfd.uci.edu/~gohlke/pythonlibs/ansi47vi/lxml-3.3.6.win32-py2.7.exe (32-bit).
 
 Then open an OSGEO4W shell and use easy_install to install the downloaded lxml module, by issuing the following command
 > easy_install location-and-filename-of-lxml-exe
