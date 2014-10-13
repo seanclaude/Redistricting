@@ -1,5 +1,5 @@
 <RCC>
-    <qresource prefix="/plugins/DelimitationToolbox" >
+    <qresource prefix="/plugins/Redistricting" >
         <file>icon.png</file>
     </qresource>
 </RCC>

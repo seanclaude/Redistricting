@@ -1,8 +1,7 @@
 """
 /***************************************************************************
- DelimitationToolbox
- delimitation.py                       A QGIS plugin
- Various tools for electoral delimitation
+ Redistricting
+ Electorate Rebalancing and Redistricting
                               -------------------
         begin                : 2014-07-06
         git sha              : $Format:%H$
@@ -32,14 +31,10 @@ from PyQt4.QtCore import QSettings
 
 
 class Configuration(object):
-    SRC_DIR = "DelimitationToolbox/src_directory"
-    SETTINGS = "DelimitationToolbox/settings"
-    KML_STATE = "DelimitationToolbox/balloon_state"
-    KML_POLLING = "DelimitationToolbox/balloon_polling"
-    KML_PARLIAMENTARY = "DelimitationToolbox/balloon_parliamentary"
-    KML_OTHERS = "DelimitationToolbox/balloon_others"
-    UI_STATE = "DelimitationToolbox/ui"
-    VERSION = "DelimitationToolbox/config_version"
+    SRC_DIR = "Redistricting/src_directory"
+    SETTINGS = "Redistricting/settings"
+    UI_STATE = "Redistricting/ui"
+    VERSION = "Redistricting/config_version"
 
     __parser = None
     __basepath = None

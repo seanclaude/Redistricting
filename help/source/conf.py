@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-# DelimitationToolbox documentation build configuration file, created by
+# Redistricting documentation build configuration file, created by
 # sphinx-quickstart on Sun Feb 12 17:11:03 2012.
 #
 # This file is execfile()d with the current directory set to its containing dir.
@@ -40,7 +40,7 @@ source_suffix = '.rst'
 master_doc = 'index'
 
 # General information about the project.
-project = u'DelimitationToolbox'
+project = u'Redistricting'
 copyright = u'2013, Sean Lin'
 
 # The version info for the project you're documenting, acts as replacement for
@@ -178,7 +178,7 @@ htmlhelp_basename = 'TemplateClassdoc'
 # Grouping the document tree into LaTeX files. List of tuples
 # (source start file, target name, title, author, documentclass [howto/manual]).
 latex_documents = [
-  ('index', 'DelimitationToolbox.tex', u'DelimitationToolbox Documentation',
+  ('index', 'Redistricting.tex', u'Redistricting Documentation',
    u'Sean Lin', 'manual'),
 ]
 
@@ -211,6 +211,6 @@ latex_documents = [
 # One entry per manual page. List of tuples
 # (source start file, name, description, authors, manual section).
 man_pages = [
-    ('index', 'TemplateClass', u'DelimitationToolbox Documentation',
+    ('index', 'TemplateClass', u'Redistricting Documentation',
      [u'Sean Lin'], 1)
 ]

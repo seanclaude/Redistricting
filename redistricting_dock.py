@@ -2,9 +2,8 @@
 
 """
 /***************************************************************************
- DelimitationToolbox
- delimitationtoolbox_dock.py                A QGIS plugin
- Various tools for electoral delimitation
+ Redistricting
+ Electorate Rebalancing and Redistricting
                               -------------------
         begin                : 2014-07-06
         git sha              : $Format:%H$
@@ -21,26 +20,21 @@
  *                                                                         *
  ***************************************************************************/
 """
-import csv
-import glob
 import json
 import re
-import traceback
-from qgis.core import QgsMessageLog, QgsPalLayerSettings, QgsSymbolV2, QgsRendererCategoryV2, \
-    QgsCategorizedSymbolRendererV2, QgsFeatureRequest, QgsFeature, QgsGeometry, QgsExpression, QgsMapLayerRegistry, \
-    QgsVectorLayer
+from qgis.core import QgsPalLayerSettings, QgsSymbolV2, QgsRendererCategoryV2, \
+    QgsCategorizedSymbolRendererV2, QgsFeatureRequest, QgsFeature, QgsGeometry, QgsExpression, QgsMapLayerRegistry
 from qgis.gui import *
 from PyQt4 import uic
-from PyQt4.QtCore import Qt, SIGNAL, QObject, pyqtSignal, QThread
+from PyQt4.QtCore import Qt, SIGNAL, QObject, pyqtSignal
 from PyQt4.QtGui import QComboBox, QDockWidget, QColor, QFileDialog, QMessageBox, QDialog, QTableWidgetItem, QLineEdit
 from configuration import *
 import configuration
-from helper.qgis_util import extend_qgis_interface, delete_shapefile
+from helper.qgis_util import extend_qgis_interface
 from helper.string import parse_float
-from helper.ui import extend_qt_list_widget, MessageType, extend_qlabel_setbold, QgisMessageBarProgress
-from delimitation import Delimitation, LayerType
+from helper.ui import extend_qt_list_widget, MessageType, extend_qlabel_setbold
 from balancer import Balancer
-
+from layer_type import LayerType
 
 FORM_CLASS, _ = uic.loadUiType(os.path.join(os.path.dirname(__file__), 'ui_delimitationtoolbox_dock.ui'))
 CONFIG_FORM_CLASS, _ = uic.loadUiType(os.path.join(os.path.dirname(__file__), 'ui_configuration.ui'))
@@ -48,7 +42,6 @@ CONFIG_FORM_CLASS, _ = uic.loadUiType(os.path.join(os.path.dirname(__file__), 'u
 
 class DelimitationToolboxDock(QDockWidget, FORM_CLASS):
     def __init__(self, iface, parent=None):
-
         """Constructor."""
         super(DelimitationToolboxDock, self).__init__(parent)
         # Set up the user interface from Designer.
@@ -78,7 +71,6 @@ class DelimitationToolboxDock(QDockWidget, FORM_CLASS):
         self.balancer_new = None
 
         # extensions
-        self.list_checks = extend_qt_list_widget(self.list_checks)
         self.iface = extend_qgis_interface(iface)
 
         # manual rebalancer
@@ -105,8 +97,6 @@ class DelimitationToolboxDock(QDockWidget, FORM_CLASS):
         colour = QColor(255, 255, 51, 150)  # transparent yellow
         self.canvas.setSelectionColor(colour)
 
-        self.btGenerateKML.setEnabled(False)
-
         # extend labels
         extend_qlabel_setbold(self.label_live_state)
         extend_qlabel_setbold(self.label_live_par)
@@ -115,9 +105,6 @@ class DelimitationToolboxDock(QDockWidget, FORM_CLASS):
         QObject.connect(self.btRenumber, SIGNAL("clicked()"), self.layer_renumber)
         QObject.connect(self.btLoadLayer, SIGNAL("clicked()"), self.select_layer)
         QObject.connect(self.btRebalance, SIGNAL("clicked()"), self.balancer_start)
-        QObject.connect(self.btGenerate, SIGNAL("clicked()"), self.generator_start)
-        QObject.connect(self.btGenerateKML, SIGNAL("clicked()"), self.balancer_generate_start)
-        QObject.connect(self.BtInputDir, SIGNAL("clicked()"), self.select_input_dir)
         QObject.connect(self.btEditConfig, SIGNAL("clicked()"), self.configuration.show)
         QObject.connect(self.btDuplicate, SIGNAL("clicked()"), self.fields_duplicate_old)
         QObject.connect(self.btRedrawLayer, SIGNAL("clicked()"), self.layer_redraw)
@@ -140,21 +127,8 @@ class DelimitationToolboxDock(QDockWidget, FORM_CLASS):
 
         self.setAttribute(Qt.WidgetAttribute(Qt.WA_DeleteOnClose))
 
-        # read from qgis settings
-        self.inputDir.setText(Configuration().read_qt(Configuration.SRC_DIR))
-
         # populate state
         self.populate_state_selector()
-
-    def messsage_handler(self, message_type, message):
-        if message_type == MessageType.Fail:
-            self.list_checks.msg_fail(message)
-        elif message_type == MessageType.Normal:
-            self.list_checks.msg_normal(message)
-        elif message_type == MessageType.OK:
-            self.list_checks.msg_ok(message)
-        else:
-            raise Exception("Unknown message type {}".format(message_type))
 
     def statistics_update(self):
         self.label_total_voters.setText(str(self.balancer_old.total_voters))
@@ -176,7 +150,6 @@ class DelimitationToolboxDock(QDockWidget, FORM_CLASS):
                                                    self.balancer_new.statemax_actual_precentage))
 
     def live_show(self):
-
         selectedfeatureids = self.layer.selectedFeaturesIds()
         current_state = self.selector_state.itemData(self.selector_state.currentIndex())
         current_par = self.selector_par.itemData(self.selector_par.currentIndex())
@@ -219,8 +192,7 @@ class DelimitationToolboxDock(QDockWidget, FORM_CLASS):
     def fields_duplicate_old(self):
         confirmation = QMessageBox.question(self,
                                             "Overwrite values",
-                                            "Are you sure? Allocation for the new "
-                                            "constituencies will be overwritten with the old map.",
+                                            "Are you sure? Any newly allocated IDs will be overwritten.",
                                             QMessageBox.Yes | QMessageBox.No)
         if confirmation == QMessageBox.No:
             return
@@ -263,8 +235,8 @@ class DelimitationToolboxDock(QDockWidget, FORM_CLASS):
     def fields_reset(self):
         confirmation = QMessageBox.question(self,
                                             "Reset values",
-                                            """Are you sure? This operation will permanently remove all new allocations.
-                                            You will need to rebalance all areas from the beginning.""",
+                                            """Are you sure? This operation will permanently remove all new allocated IDs.
+                                            You will need to start all over again from the beginning.""",
                                             QMessageBox.Yes | QMessageBox.No)
         if confirmation == QMessageBox.No:
             return
@@ -581,14 +553,14 @@ class DelimitationToolboxDock(QDockWidget, FORM_CLASS):
             self.tab_rebalance.setCurrentIndex(1)
             raw_par = changed_feature[balancer.par_field]
             if raw_par:
-                par_val = int(re.search(r'\d+', raw_par).group())
+                par_val = int(re.search(r'\d+', str(raw_par)).group())
                 selector_par_index = self.selector_par.findData(par_val)
                 if selector_par_index != -1:
                     self.selector_par.setCurrentIndex(selector_par_index)
 
             raw_state = changed_feature[balancer.state_field]
             if raw_state:
-                state_val = int(re.search(r'\d+', raw_state).group())
+                state_val = int(re.search(r'\d+', str(raw_state)).group())
                 selector_state_index = self.selector_state.findData(state_val)
                 if selector_state_index != -1:
                     self.selector_state.setCurrentIndex(selector_state_index)
@@ -656,13 +628,17 @@ class DelimitationToolboxDock(QDockWidget, FORM_CLASS):
         self.layer.setSelectedFeatures([])
 
     def select_layer(self):
-        startdir = os.path.join(self.inputDir.text(), Configuration().read("KML", "outputdir"))
+        startdir = Configuration().read_qt(Configuration.SRC_DIR)
         filepath = QFileDialog.getOpenFileName(parent=self,
                                                caption='Select shapefile',
                                                filter="*.shp",
                                                directory=startdir)
         if filepath:
             path, filename = os.path.split(filepath)
+
+            # remember selected path
+            Configuration().store_qt(Configuration.SRC_DIR, json.dumps(path))
+
             name, ext = os.path.splitext(filename)
             layer = self.iface.addVectorLayer(filepath, name, "ogr")
             if not layer.isValid():
@@ -670,158 +646,6 @@ class DelimitationToolboxDock(QDockWidget, FORM_CLASS):
                 return
 
                 # QgsMapLayerRegistry.instance().addMapLayer(layer)
-
-    def select_input_dir(self):
-        startdir = os.path.dirname(self.inputDir.text())
-        directory = QFileDialog.getExistingDirectory(parent=self,
-                                                     caption="Open Directory",
-                                                     directory=startdir,
-                                                     options=(
-                                                         QFileDialog.ShowDirsOnly |
-                                                         QFileDialog.DontResolveSymlinks))
-        if directory:
-            self.inputDir.setText(directory)
-
-    def generator_start(self):
-        # generate KML
-        if self.selector_target_state.currentIndex() == 0:
-            self.iface.warning("Please select state first")
-            return
-
-        src_dir = self.inputDir.text()
-
-        self.list_checks.clear()
-        self.messsage_handler(MessageType.Normal, "Validating requirements ...")
-
-        if not src_dir:
-            self.iface.error("Location of files not specified")
-            return
-
-        shapefiles = glob.glob1(src_dir, '*.shp')
-        if shapefiles.__len__() == 1:
-            self.messsage_handler(MessageType.OK,
-                                  "{} Shapefile found. Using {}".format(shapefiles.__len__(), shapefiles[0]))
-        else:
-            self.messsage_handler(MessageType.Fail, "Unexpected number of Shapefiles found. Only one " +
-                                  "shapefile is required. Aborting.")
-            return
-
-        csvfiles = glob.glob1(src_dir, '*.csv')
-        if csvfiles.__len__():
-            self.messsage_handler(MessageType.OK,
-                                  "{} CSV files(s) found. Using {}".format(csvfiles.__len__(), csvfiles[0]))
-        else:
-            self.messsage_handler(MessageType.Fail, "No CSV files found. Aborting.")
-            return
-
-        # save settings
-        Configuration().store_qt(Configuration.SRC_DIR, src_dir)
-
-        # check that CSV file contains all fields
-        if not self.validate_csv_file(src_dir, csvfiles[0]):
-            return
-
-        self.worker = Delimitation(self.selector_target_state.currentText(), src_dir)
-
-        wfiles = self.worker.get_working_files([LayerType.Polling, LayerType.State, LayerType.Parliament])
-
-        if not self.files_check_opened(wfiles):
-            self.messsage_handler(MessageType.Fail, "Operation cancelled")
-            return
-
-        # get duplicate values if any
-        match_feat_name = Configuration().read("CSV", "field")
-        layer = QgsVectorLayer(os.path.join(src_dir, shapefiles[0]), self.selector_target_state.currentText(), "ogr")
-        field_values = {}
-        for f in layer.getFeatures():
-            if f.fieldNameIndex(match_feat_name) == -1:
-                self.messsage_handler(MessageType.Fail,
-                                      "The field '{}' does not exist in Feature {}".format(match_feat_name, f.id()))
-                return
-            field_values.setdefault(f[match_feat_name], []).append(f.id())
-
-        duplicates = []
-        duplicate_ids = []
-        for k, v in field_values.iteritems():
-            if v.__len__() > 1:
-                duplicates.append(k)
-                duplicate_ids.extend(v)
-
-        if duplicates.__len__():
-            QgsMapLayerRegistry.instance().addMapLayer(layer)
-            layer.setSelectedFeatures(duplicate_ids)
-            self.messsage_handler(MessageType.Fail,
-                                  "Duplicate values found for {}. Aborting ...".format(", ".join(duplicates)))
-            return
-
-        self.messsage_handler(MessageType.OK, "All requirements validated. Starting ...")
-
-        self.btGenerate.setEnabled(False)
-
-        self.thread = QThread(self)
-
-        self.worker.moveToThread(self.thread)
-        self.worker.finished.connect(self.generator_end)
-        # self.worker.error.connect(self.generator_error)
-        self.worker.message.connect(self.messsage_handler)
-        try:
-            self.progressBar = QgisMessageBarProgress()
-            self.worker.progress.connect(self.progressBar.setPercentage)
-            self.thread.started.connect(self.worker.run_generate_shapefile_kml)
-            self.thread.start()
-        except Exception, e:
-            self.generator_error(e, traceback.format_exc())
-
-    def generator_error(self, e, exception_string):
-        self.messsage_handler(MessageType.Fail, exception_string)
-        QgsMessageLog.logMessage('DelimitationToolbox Exception:\n'.format(exception_string),
-                                 level=QgsMessageLog.CRITICAL)
-
-    def generator_end(self, ret):
-        # clean up the worker and thread
-        self.worker.deleteLater()
-        self.thread.quit()
-        self.thread.wait()
-        self.thread.deleteLater()
-
-        if not ret:
-            self.iface.info('Done!')
-        else:
-            self.messsage_handler(MessageType.Fail, ret)
-
-        if self.progressBar:
-            self.progressBar.close()
-            self.progressBar = None
-        self.btGenerate.setEnabled(True)
-
-    def files_check_opened(self, files):
-        opened = {}
-        for f in files:
-            for lyr in self.canvas.layers():
-                if lyr.type() != lyr.VectorLayer:
-                    continue
-
-                lyr_path = lyr.dataProvider().dataSourceUri()
-                if lyr_path.find('|') != -1:
-                    lyr_path, _ = lyr_path.split("|")
-
-                if f == os.path.normpath(lyr_path):
-                    opened.update({lyr.id(): lyr_path})
-
-        if opened.__len__():
-            confirmation = QMessageBox.question(self,
-                                                "Files in use",
-                                                "Some files are currently opened in QGIS. Click YES to automatically close these files or NO to do it yourself",
-                                                QMessageBox.Yes | QMessageBox.No)
-            if confirmation == QMessageBox.No:
-                return False
-
-            # close these files
-            for k, v in opened.items():
-                QgsMapLayerRegistry().instance().removeMapLayer(k)
-                delete_shapefile(v)
-
-        return True
 
     def topology_display(self):
         selected_index = self.selector_topo_type.currentIndex()
@@ -876,43 +700,6 @@ class DelimitationToolboxDock(QDockWidget, FORM_CLASS):
 
         self.iface.info("Allocation table refreshed")
 
-    def validate_csv_file(self, cdir, cfile):
-        with open(os.path.join(cdir, cfile), 'rb') as csvfile:
-            rows = csv.reader(csvfile, delimiter=',', quoting=csv.QUOTE_NONE)
-            csv_columns = rows.next()
-
-        # configuration requirements
-        conf_columns = set()
-        conf_columns.update(Configuration().read("CSV", "columns"))
-        conf_columns.update(Configuration().read("Polling", "name_columns"))
-        conf_columns.update(Configuration().read("Polling", "attributes"))
-        conf_columns.update(Configuration().read("State", "name_columns"))
-        conf_columns.update(Configuration().read("State", "attributes"))
-        conf_columns.update(Configuration().read("Parliament", "name_columns"))
-        conf_columns.update(Configuration().read("Parliament", "attributes"))
-
-        # check name not more than 10 characters
-        toolongs = []
-        for col in conf_columns:
-            if col.__len__() > 10:
-                toolongs.append(col)
-
-        if toolongs.__len__():
-            self.messsage_handler(MessageType.Fail,
-                                  "The name of column(s) {} is too long (max 10 characters). Aborting.".format(
-                                      ", ".join(toolongs),
-                                      cfile))
-            return False
-
-        diff = conf_columns.difference(csv_columns)
-
-        if diff.__len__():
-            self.messsage_handler(MessageType.Fail, "Column(s) {} missing from {}. Aborting."
-                                  .format(", ".join(diff), cfile))
-            return False
-
-        return True
-
     def balancer_start(self):
         if self.balancer_started:
             self.balancer_stop()
@@ -923,45 +710,6 @@ class DelimitationToolboxDock(QDockWidget, FORM_CLASS):
                 self.analyse()
             else:
                 self.iface.info("Feature not yet implemented")
-
-    def balancer_generate_start(self):
-        if not self.balancer_new.is_balanced():
-            self.iface.error("Map not balanced. Unable to generate KML.")
-            return
-
-        if self.selector_target_state.currentIndex() == 0:
-            self.iface.warning("Please select a target state first")
-            return
-
-        filepath, layerid = self.layer.dataProvider().dataSourceUri().split("|")
-        path, filename = os.path.split(filepath)
-        self.worker = Delimitation(self.selector_target_state.currentText(), path, path)
-
-        # set the temp layer as currently loaded layer
-        self.worker.master_layer = self.layer
-        self.worker.map_layers.setdefault(LayerType.Polling, []).append(self.layer)
-
-        # check for open files
-        wfiles = self.worker.get_working_files([LayerType.State, LayerType.Parliament])
-
-        if not self.files_check_opened(wfiles):
-            self.iface.warning("Operation aborted")
-            return
-
-        self.thread = QThread(self)
-
-        self.worker.moveToThread(self.thread)
-        self.worker.finished.connect(self.generator_end)
-        # self.worker.error.connect(self.generator_error)
-        self.worker.message.connect(self.messsage_handler)
-
-        try:
-            self.progressBar = QgisMessageBarProgress()
-            self.worker.progress.connect(self.progressBar.setPercentage)
-            self.thread.started.connect(self.worker.run_generate_kml)
-            self.thread.start()
-        except Exception, e:
-            self.generator_error(e, traceback.format_exc())
 
     def get_balancer(self):
         if self.selector_map_type.currentIndex() == 0:
@@ -1057,7 +805,6 @@ class DelimitationToolboxDock(QDockWidget, FORM_CLASS):
         self.selector_seat_type.setEnabled(True)
         self.selector_overlay_type.setEnabled(True)
         self.btRedrawLayer.setEnabled(True)
-        self.btGenerateKML.setEnabled(True)
         self.btRenumber.setEnabled(True)
         self.btShowTopology.setEnabled(True)
 
@@ -1145,7 +892,6 @@ class DelimitationToolboxDock(QDockWidget, FORM_CLASS):
         self.selector_map_type.setEnabled(False)
         self.selector_seat_type.setEnabled(False)
         self.selector_overlay_type.setEnabled(False)
-        self.btGenerateKML.setEnabled(False)
         self.btRenumber.setEnabled(False)
         self.btShowTopology.setEnabled(False)
 
@@ -1178,17 +924,6 @@ class DelimitationToolboxConfigDialog(QDialog, CONFIG_FORM_CLASS):
                 content = f.readall()
         self.txt_settings.setText(content)
 
-        # load styles
-        polling = Delimitation.get_config_polling()
-        self.txt_Polling.setText(polling)
-        state = Delimitation.get_config_state()
-        self.txt_State.setText(state)
-        parliamentary = Delimitation.get_config_parliament()
-        self.txt_Parliamentary.setText(parliamentary)
-
-        others = Configuration().read_qt_file(Configuration.KML_OTHERS, "others.style")
-        self.txt_Others.setText(others)
-
         super(DelimitationToolboxConfigDialog, self).show()
         self.exec_()
 
@@ -1196,10 +931,6 @@ class DelimitationToolboxConfigDialog(QDialog, CONFIG_FORM_CLASS):
 
         # todo: check settings for syntax errors
         Configuration().store_qt(Configuration.SETTINGS, self.txt_settings.toPlainText())
-        Configuration().store_qt(Configuration.KML_POLLING, self.txt_Polling.toPlainText())
-        Configuration().store_qt(Configuration.KML_STATE, self.txt_State.toPlainText())
-        Configuration().store_qt(Configuration.KML_PARLIAMENTARY, self.txt_Parliamentary.toPlainText())
-        Configuration().store_qt(Configuration.KML_OTHERS, self.txt_Others.toPlainText())
 
         # reload configuration
         Configuration().load()
@@ -1222,22 +953,6 @@ class DelimitationToolboxConfigDialog(QDialog, CONFIG_FORM_CLASS):
             content = f.read()
 
         Configuration().store_qt(Configuration.SETTINGS, content)
-
-        with codecs.open(filename=os.path.join(self.__path, "polling.style"), mode='r', encoding='utf-8') as f:
-            content = f.read()
-        Configuration().store_qt(Configuration.KML_POLLING, content)
-
-        with codecs.open(filename=os.path.join(self.__path, "state.style"), mode='r', encoding='utf-8') as f:
-            content = f.read()
-        Configuration().store_qt(Configuration.KML_STATE, content)
-
-        with codecs.open(filename=os.path.join(self.__path, "parliament.style"), mode='r', encoding='utf-8') as f:
-            content = f.read()
-        Configuration().store_qt(Configuration.KML_PARLIAMENTARY, content)
-
-        with codecs.open(filename=os.path.join(self.__path, "others.style"), mode='r', encoding='utf-8') as f:
-            content = f.read()
-        Configuration().store_qt(Configuration.KML_OTHERS, content)
 
         # reload configuration
         Configuration().load()

@@ -1,8 +1,8 @@
 from PyQt4.QtCore import QSettings
 
-SRC_DIR = "DelimitationToolbox/src_directory"
-CSV_FILE = "DelimitationToolbox/csv_file"
-KML_OUT = "DelimitationToolbox/kml_out"
+SRC_DIR = "Redistricting/src_directory"
+CSV_FILE = "Redistricting/csv_file"
+KML_OUT = "Redistricting/kml_out"
 
 Settings = QSettings()
 

@@ -56,66 +56,6 @@
      </property>
     </widget>
    </widget>
-   <widget class="QWidget" name="tab_DM">
-    <attribute name="title">
-     <string>Polling Area Style</string>
-    </attribute>
-    <widget class="QTextEdit" name="txt_Polling">
-     <property name="geometry">
-      <rect>
-       <x>10</x>
-       <y>10</y>
-       <width>571</width>
-       <height>341</height>
-      </rect>
-     </property>
-    </widget>
-   </widget>
-   <widget class="QWidget" name="tab_STATE">
-    <attribute name="title">
-     <string>State Style</string>
-    </attribute>
-    <widget class="QTextEdit" name="txt_State">
-     <property name="geometry">
-      <rect>
-       <x>10</x>
-       <y>10</y>
-       <width>571</width>
-       <height>341</height>
-      </rect>
-     </property>
-    </widget>
-   </widget>
-   <widget class="QWidget" name="tab_PAR">
-    <attribute name="title">
-     <string>Parliamentary Style</string>
-    </attribute>
-    <widget class="QTextEdit" name="txt_Parliamentary">
-     <property name="geometry">
-      <rect>
-       <x>10</x>
-       <y>10</y>
-       <width>571</width>
-       <height>341</height>
-      </rect>
-     </property>
-    </widget>
-   </widget>
-   <widget class="QWidget" name="tab_Others">
-    <attribute name="title">
-     <string>Other KML elements</string>
-    </attribute>
-    <widget class="QTextEdit" name="txt_Others">
-     <property name="geometry">
-      <rect>
-       <x>10</x>
-       <y>10</y>
-       <width>571</width>
-       <height>341</height>
-      </rect>
-     </property>
-    </widget>
-   </widget>
   </widget>
   <widget class="QPushButton" name="btClose">
    <property name="geometry">
@@ -355,11 +295,8 @@
  </widget>
  <tabstops>
   <tabstop>tabWidget</tabstop>
-  <tabstop>txt_Polling</tabstop>
   <tabstop>btSave</tabstop>
   <tabstop>btClose</tabstop>
-  <tabstop>txt_State</tabstop>
-  <tabstop>txt_Parliamentary</tabstop>
   <tabstop>txt_settings</tabstop>
  </tabstops>
  <resources/>

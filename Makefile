@@ -1,7 +1,6 @@
 #/***************************************************************************
-# DelimitationToolbox
-#
-# Inserts attributes, merge features and generate KML files
+# Redistricting
+# Electorate Rebalancing and Redistricting
 #							 -------------------
 #		begin				: 2014-07-06
 #		git sha				: $Format:%H$
@@ -21,7 +20,7 @@
 #################################################
 # Edit the following to match your sources lists
 #################################################
-UICPATH = C:\OSGeo4W\apps\Python27\Lib\site-packages\PyQt4\uic\pyuic.py
+UICPATH = $(OSGEO4W_ROOT)\apps\Python27\Lib\site-packages\PyQt4\uic\pyuic.py
 UIC = python $(UICPATH)
 
 #Add iso code for any locales you want to support here (space separated)
@@ -30,14 +29,14 @@ LOCALES = af
 # translation
 SOURCES = \
 	__init__.py \
-	delimitationtoolbox.py \
-	delimitationtoolbox_dock.py
+	redistricting.py \
+	redistricting_dock.py
 
-PLUGINNAME = DelimitationToolbox
+PLUGINNAME = Redistricting
 
 PY_FILES = \
-	delimitationtoolbox.py \
-	delimitationtoolbox_dock.py \
+	redistricting.py \
+	redistricting_dock.py \
 	__init__.py
 
 EXTRAS = icon.png metadata.txt

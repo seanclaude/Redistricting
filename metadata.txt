@@ -1,15 +1,15 @@
 [general]
-name=Delimitation Toolbox
+name=Redistricting
 qgisMinimumVersion=2.2
-about=Various tools for getting GIS files ready for analysis and presentation. Rebalancer uses the Tindak Malaysia (tindakmalaysia.org) method of constituency equalisation.
-description=Features include CSV attribute insertion, KML file generation/styling and a graphical redistricting and voter/demographic rebalancing tool.
-version=0.1.10
+description=Electorate Redistricting and Equalisation
+about=Redistricting for QGIS uses the Tindak Malaysia (tindakmalaysia.org) method of constituency equalisation.
+version=0.1
 author=Sean Lin
 email=seanlinmt@clearpixels.co.nz
-tags=vector, districting, politics, CSV, KML, delimitation
-homepage=https://github.com/seanlinmt/DelimitationToolbox
-repository=https://github.com/seanlinmt/DelimitationToolbox
-tracker=https://github.com/seanlinmt/DelimitationToolbox/issues
+tags=vector, districting, democracy, delimitation
+homepage=http://www.tindakmalaysia.org
+repository=https://github.com/seanlinmt/Redistricting
+tracker=https://github.com/seanlinmt/Redistricting/issues
 experimental=False
 deprecated=False
 icon=icon.png

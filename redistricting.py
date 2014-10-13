@@ -2,9 +2,8 @@
 
 """
 /***************************************************************************
- DelimitationToolbox
- delimitationtoolbox.py       A QGIS plugin
- Various tools for electoral delimitation
+ Redistricting
+Electorate Rebalancing and Redistricting
                               -------------------
         begin                : 2014-07-06
         git sha              : $Format:%H$
@@ -26,17 +25,17 @@ from PyQt4.QtCore import QSettings, QTranslator, qVersion, QCoreApplication, Qt
 from PyQt4.QtGui import QAction, QIcon, QMainWindow, QDockWidget
 
 __revision__ = '$Format:%H$'
-__version__ = '0.1.10'
+__version__ = '0.1'
 
 # Import the code for the dialog
 import resources_rc
-from delimitationtoolbox_dock import DelimitationToolboxDock
+from redistricting_dock import DelimitationToolboxDock
 import os.path
 
 
-class DelimitationToolbox:
-    __pname__ = 'Delimitation Toolbox'
-    __modname__ = 'DelimitationToolbox'
+class Redistricting:
+    __pname__ = 'Redistricting'
+    __modname__ = 'Redistricting'
 
     def __init__(self, iface):
         """Constructor.
@@ -56,7 +55,7 @@ class DelimitationToolbox:
         locale_path = os.path.join(
             self.plugin_dir,
             'i18n',
-            '{}_{}.qm'.format(DelimitationToolbox.__modname__, locale))
+            '{}_{}.qm'.format(Redistricting.__modname__, locale))
 
         if os.path.exists(locale_path):
             self.translator = QTranslator()
@@ -83,7 +82,7 @@ class DelimitationToolbox:
         :rtype: QString
         """
         # noinspection PyTypeChecker,PyArgumentList,PyCallByClass
-        return QCoreApplication.translate(DelimitationToolbox.__modname__, message)
+        return QCoreApplication.translate(Redistricting.__modname__, message)
 
     def add_action(
             self,
@@ -151,7 +150,7 @@ class DelimitationToolbox:
             self.iface.addToolBarIcon(action)
 
         if add_to_menu:
-            self.iface.addPluginToMenu(DelimitationToolbox.__pname__, action)
+            self.iface.addPluginToMenu(Redistricting.__pname__, action)
 
         self.actions.append(action)
 
@@ -160,22 +159,22 @@ class DelimitationToolbox:
     def initGui(self):
         """Create the menu entries and toolbar icons inside the QGIS GUI."""
 
-        icon_path = ':/plugins/{}/icon.png'.format(DelimitationToolbox.__modname__)
+        icon_path = ':/plugins/{}/icon.png'.format(Redistricting.__modname__)
         self.add_action(
             icon_path,
-            text=self.tr(DelimitationToolbox.__pname__),
+            text=self.tr(Redistricting.__pname__),
             callback=self.run,
             parent=self.iface.mainWindow())
 
     def unload(self):
         for action in self.actions:
             self.iface.removePluginMenu(
-                self.tr(DelimitationToolbox.__pname__),
+                self.tr(Redistricting.__pname__),
                 action)
             self.iface.removeToolBarIcon(action)
 
         for w in self.iface.mainWindow().findChildren(QDockWidget):
-            if w.windowTitle().find(DelimitationToolbox.__pname__) != -1:
+            if w.windowTitle().find(Redistricting.__pname__) != -1:
                 self.iface.mainWindow().removeDockWidget(w)
 
     def run(self):
@@ -183,7 +182,7 @@ class DelimitationToolbox:
         widget_other = None
         widget_exist = None
         for w in self.iface.mainWindow().findChildren(QDockWidget):
-            if w.windowTitle().find(DelimitationToolbox.__pname__) != -1:
+            if w.windowTitle().find(Redistricting.__pname__) != -1:
                 widget_exist = w
             elif self.iface.mainWindow().dockWidgetArea(w) == Qt.RightDockWidgetArea:
                 # we want the first one only
@@ -195,7 +194,7 @@ class DelimitationToolbox:
             self.iface.mainWindow().removeDockWidget(widget_exist)
 
         self.dock = DelimitationToolboxDock(self.iface, self.iface.mainWindow())
-        self.dock.setWindowTitle('{} {}'.format(DelimitationToolbox.__pname__, __version__))
+        self.dock.setWindowTitle('{} {}'.format(Redistricting.__pname__, __version__))
         self.iface.mainWindow().addDockWidget(Qt.RightDockWidgetArea, self.dock)
 
         if widget_other:
@@ -205,4 +204,4 @@ class DelimitationToolbox:
         self.dock.raise_()
         self.dock.layers_load()
 
-        self.dock.iface.info("{} loaded".format(DelimitationToolbox.__pname__))
+        self.dock.iface.info("{} loaded".format(Redistricting.__pname__))

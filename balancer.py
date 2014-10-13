@@ -1,8 +1,7 @@
 """
 /***************************************************************************
  DelimitationToolbox
- delimitation.py                       A QGIS plugin
- Various tools for electoral delimitation
+ Electorate Rebalancing and Redistricting
                               -------------------
         begin                : 2014-07-06
         git sha              : $Format:%H$
@@ -23,10 +22,10 @@
 import math
 from re import search
 import colouring
-from delimitation import LayerType
 from enum import Enum
 from helper.ui import QgisMessageBarProgress, isnull
 from qgis.core import QgsVectorLayer, QgsFeature, QgsPoint, QgsGeometry
+from layer_type import LayerType
 
 
 class EqualStatus(Enum):
@@ -166,9 +165,9 @@ class Balancer(object):
             self.topology_polling.update({f.id(): {
                 self.polling_field: None if isnull(f[self.polling_field]) else f[self.polling_field],
                 self.par_field: None if isnull(f[self.par_field]) else int(
-                    search(r'\d+', f[self.par_field]).group()).__str__(),
+                    search(r'\d+', str(f[self.par_field])).group()).__str__(),
                 self.state_field: None if isnull(f[self.state_field]) else int(
-                    search(r'\d+', f[self.state_field]).group()).__str__(),
+                    search(r'\d+', str(f[self.state_field])).group()).__str__(),
                 self.voters_field: int(f[self.voters_field]),
                 "geom": f.geometryAndOwnership()
             }})
@@ -181,7 +180,7 @@ class Balancer(object):
         for k, v in dict_values.items():
             for k2, v2 in v.items():
                 self.layer.changeAttributeValue(k, self.layer.fieldNameIndex(k2), v2)
-                self.topology_polling[k][k2] = int(search(r'\d+', v2).group())
+                self.topology_polling[k][k2] = int(search(r'\d+', str(v2)).group())
 
     def load_topology(self):
         self.topology_state.clear()

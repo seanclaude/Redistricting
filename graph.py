@@ -1,8 +1,7 @@
 """
 /***************************************************************************
  DelimitationToolbox
- delimitation.py                       A QGIS plugin
- Various tools for electoral delimitation
+ Electorate Rebalancing and Redistricting
                               -------------------
         begin                : 2014-07-06
         git sha              : $Format:%H$
