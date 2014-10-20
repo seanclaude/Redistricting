@@ -35,7 +35,7 @@ class EqualStatus(Enum):
 
 
 class Balancer(object):
-    def __init__(self, layer, voters_field, polling_field, state_field, par_field, delta,
+    def __init__(self, name, layer, voters_field, polling_field, state_field, par_field, delta,
                  par_average_target=None,
                  state_average_target=None,
                  par_count_limit=None,
@@ -43,6 +43,7 @@ class Balancer(object):
                  state_prefix_format="%02d",
                  par_prefix_format="%03d"):
 
+        self.name = name
         self.total_voters = 0
         self.topology_polling = {}
         self.topology_state = {}
@@ -59,7 +60,7 @@ class Balancer(object):
         self.par_count_limit = par_count_limit
         self.state_count = 0
         self.par_count = 0
-
+        self.topology_dirty = True
         self.state_average = 0
         self.state_average_target = state_average_target
         self.statemax_target = None
@@ -159,7 +160,7 @@ class Balancer(object):
         nfeatures = self.layer.featureCount()
         nop = nfeatures
         iop = 0
-        progress = QgisMessageBarProgress("Initialising topology ...")
+        progress = QgisMessageBarProgress("Reading {} attribute fields ...".format(self.name))
 
         for f in self.layer.getFeatures():
             self.topology_polling.update({f.id(): {
@@ -182,7 +183,12 @@ class Balancer(object):
                 self.layer.changeAttributeValue(k, self.layer.fieldNameIndex(k2), v2)
                 self.topology_polling[k][k2] = int(search(r'\d+', str(v2)).group())
 
+        self.topology_dirty = True
+
     def load_topology(self):
+        if not self.topology_dirty:
+            return
+
         self.topology_state.clear()
         self.topology_par.clear()
         self.init_topology()
@@ -208,6 +214,7 @@ class Balancer(object):
 
         self.calculate_limits(self.delta)
         self.init_par_state_map()
+        self.topology_dirty = False
 
     def get_colour_by_state(self, attr_value, colour_index):
         value = self.topology_state.get(attr_value)
@@ -407,9 +414,9 @@ class Balancer(object):
         return tuple((pars_left, states_left))
 
     # todo par_new_prefix unused
-    def resequence(self, par_new_prefix):
+    def resequence(self):
         ordered = sorted(self.topology_polling.items(),
-                         key=lambda x: (x[1][self.par_field], x[1][self.state_field]))
+                         key=lambda x: (x[1][self.par_field], x[1][self.state_field], x[0]))
         par_renumber = 0
         state_renumber = 0
         polling_renumber = 1
@@ -417,21 +424,26 @@ class Balancer(object):
         state_current = None
 
         for o in ordered:
-            if state_current != o[1][self.state_field]:
-                state_renumber += 1
-                polling_renumber = 1  # restart polling area renumbering
-            state_current = o[1][self.state_field]
+            val_state = o[1][self.state_field]
+            if val_state:
+                if state_current != val_state:
+                    state_renumber += 1
+                    polling_renumber = 1  # restart polling area renumbering
+                state_current = val_state
 
-            if par_current != o[1][self.par_field]:
-                par_renumber += 1
-            par_current = o[1][self.par_field]
+            val_par = o[1][self.par_field]
+            if val_par:
+                if par_current != val_par:
+                    par_renumber += 1
+                par_current = val_par
 
-            self.update_topology(
-                {o[0]: {self.state_field: self.state_prefix_format % state_renumber,
-                        self.polling_field: self.polling_prefix_format % polling_renumber,
-                        self.par_field: self.par_prefix_format % par_renumber}})
+            if val_par and val_state:
+                self.update_topology(
+                    {o[0]: {self.state_field: self.state_prefix_format % state_renumber,
+                            self.polling_field: self.polling_prefix_format % polling_renumber,
+                            self.par_field: self.par_prefix_format % par_renumber}})
 
-            polling_renumber += 1
+                polling_renumber += 1
 
 
 class NodePOLL(object):

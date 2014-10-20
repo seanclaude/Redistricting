@@ -16,7 +16,7 @@ import unittest
 
 from PyQt4.QtGui import QDialogButtonBox, QDialog
 
-from redistricting_dock import DelimitationToolboxDock
+from redistricting_dock import RedistrictingDock
 
 from utilities import get_qgis_app
 QGIS_APP = get_qgis_app()
@@ -27,7 +27,7 @@ class DelimitationBuilderDialogTest(unittest.TestCase):
 
     def setUp(self):
         """Runs before each test."""
-        self.dialog = DelimitationToolboxDock(None)
+        self.dialog = RedistrictingDock(None)
 
     def tearDown(self):
         """Runs after each test."""

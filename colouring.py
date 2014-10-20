@@ -22,7 +22,7 @@ import random
 import itertools
 import chroma
 from graph import Graph
-from helper.ui import QgisMessageBarProgress, generate_random_color
+from helper.ui import generate_random_color
 
 
 class Colouring(object):
