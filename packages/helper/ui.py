@@ -114,7 +114,7 @@ class QgisMessageBarProgress:
         iface.messageBar().clearWidgets()
         iface.messageBar().pushMessage("Error", msg,
                                        level=QgsMessageBar.CRITICAL,
-                                       duration=3)
+                                       duration=8)
 
     def setPercentage(self, i):
         self.progress.setValue(i)

@@ -20,7 +20,6 @@
 """
 
 import math
-from re import search
 import colouring
 from enum import Enum
 from helper.ui import QgisMessageBarProgress, isnull
@@ -155,33 +154,39 @@ class Balancer(object):
         raise Exception("Not implemented")
 
     def init_topology(self):
+        import re
+
         self.topology_polling.clear()
 
         nfeatures = self.layer.featureCount()
         nop = nfeatures
         iop = 0
         progress = QgisMessageBarProgress("Reading {} attribute fields ...".format(self.name))
-
-        for f in self.layer.getFeatures():
-            self.topology_polling.update({f.id(): {
-                self.polling_field: None if isnull(f[self.polling_field]) else f[self.polling_field],
-                self.par_field: None if isnull(f[self.par_field]) else int(
-                    search(r'\d+', str(f[self.par_field])).group()).__str__(),
-                self.state_field: None if isnull(f[self.state_field]) else int(
-                    search(r'\d+', str(f[self.state_field])).group()).__str__(),
-                self.voters_field: int(f[self.voters_field]),
-                "geom": f.geometryAndOwnership()
-            }})
-            iop += 1
-            progress.setPercentage(int(100 * iop / nop))
-
-        progress.close()
+        try:
+            for f in self.layer.getFeatures():
+                self.topology_polling.update({f.id(): {
+                    self.polling_field: None if isnull(f[self.polling_field]) else f[self.polling_field],
+                    self.par_field: None if isnull(f[self.par_field]) else int(
+                        re.search(r'\d+', str(f[self.par_field])).group()).__str__(),
+                    self.state_field: None if isnull(f[self.state_field]) else int(
+                        re.search(r'\d+', str(f[self.state_field])).group()).__str__(),
+                    self.voters_field: int(f[self.voters_field]),
+                    "geom": f.geometryAndOwnership()
+                }})
+                iop += 1
+                progress.setPercentage(int(100 * iop / nop))
+        except:
+            raise
+        finally:
+            progress.close()
 
     def update_topology(self, dict_values):
+        import re
+
         for k, v in dict_values.items():
             for k2, v2 in v.items():
                 self.layer.changeAttributeValue(k, self.layer.fieldNameIndex(k2), v2)
-                self.topology_polling[k][k2] = int(search(r'\d+', str(v2)).group())
+                self.topology_polling[k][k2] = int(re.search(r'\d+', str(v2)).group())
 
         self.topology_dirty = True
 
@@ -244,7 +249,7 @@ class Balancer(object):
 
     def init_par_state_map(self):
         # {par_key : {voters:voters, d: "-+",
-        # states: { state_key: d}  }}
+        # states: { state_key: (voters, d)}  }}
         self.map_par_state.clear()
         for v in self.topology_polling.values():
             par_key = v[self.par_field]
@@ -253,7 +258,7 @@ class Balancer(object):
                 continue
 
             self.map_par_state \
-                .setdefault(par_key, {"d": "{:.2f}%".format(self.get_par_deviation(par_key)),
+                .setdefault(par_key, {"d": "{:.2f}".format(self.get_par_deviation(par_key)),
                                       "states": {},
                                       "voters": self.get_par_voters(par_key)})
 
@@ -261,8 +266,9 @@ class Balancer(object):
                 continue
 
             if state_key not in self.map_par_state[par_key]['states']:
+                voters_dev_tuple = self.get_state_voters_and_deviation(state_key)
                 self.map_par_state[par_key]['states'] \
-                    .update({state_key: "{:.2f}%".format(self.get_state_deviation(state_key))})
+                    .update({state_key: (voters_dev_tuple[0], "{:.2f}".format(voters_dev_tuple[1]))})
 
     def get_par_voters(self, par_name):
         if not par_name:
@@ -275,6 +281,13 @@ class Balancer(object):
             return 0.0
 
         return (self.topology_par[par_name]['voters'] - self.par_average) * 100 / self.par_average
+
+    def get_state_voters_and_deviation(self, state_name):
+        if not state_name:
+            return 0, 0.0
+
+        voters = self.topology_state[state_name]['voters']
+        return voters, (voters - self.state_average) * 100 / self.state_average
 
     def get_par_code_sequence(self):
         if self.topology_par.keys().__len__():
@@ -295,13 +308,6 @@ class Balancer(object):
 
         # recommended size (voters)
         # recommended_par
-
-
-    def get_state_deviation(self, state_name):
-        if not state_name:
-            return 0.0
-
-        return (self.topology_state[state_name]['voters'] - self.state_average) * 100 / self.state_average
 
     def calculate_limits(self, delta):
         self.delta = delta
@@ -363,14 +369,16 @@ class Balancer(object):
         return min, max
 
     def calculate_live_totals(self, current_par, current_state, selected_ids):
+        import re
+
         voters_state = 0
         voters_par = 0
         voters_selected = 0
         if current_par:
-            current_par = search(r'\d+', str(current_par)).group()
+            current_par = re.search(r'\d+', str(current_par)).group()
 
         if current_state:
-            current_state = search(r'\d+', str(current_state)).group()
+            current_state = re.search(r'\d+', str(current_state)).group()
 
         for k, v in self.topology_polling.items():
             voters = v[self.voters_field]

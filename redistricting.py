@@ -25,7 +25,7 @@ from PyQt4.QtCore import QSettings, QTranslator, qVersion, QCoreApplication, Qt
 from PyQt4.QtGui import QAction, QIcon, QMainWindow, QDockWidget
 
 __revision__ = '$Format:%H$'
-__version__ = '0.1'
+__version__ = '0.2'
 __pname__ = 'Redistricting'
 __modname__ = 'Redistricting'
 
@@ -191,6 +191,11 @@ class Redistricting:
         if widget_other:
             self.iface.mainWindow().tabifyDockWidget(widget_other, self.dock)
 
+        for layer in self.iface.mapCanvas().layers():
+            if layer.type() == layer.VectorLayer and layer.geometryType() == 2:  # QGis.Polygon
+                self.dock.selector_layers.addItem(layer.name(), layer.id())
+
         self.dock.show()
         self.dock.raise_()
-        self.dock.iface.info("{} loaded".format(__pname__))
+        if self.dock.selector_layers.count() != 0:
+            self.dock.layer_preload(0)

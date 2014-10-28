@@ -25,7 +25,7 @@ import configparser
 from helper.singleton import Singleton
 
 defaultConfigFile = "default.ini"
-__config_version__ = 1
+__config_version__ = 1.1
 
 from PyQt4.QtCore import QSettings
 

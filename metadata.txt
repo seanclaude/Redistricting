@@ -1,15 +1,15 @@
 [general]
 name=Redistricting
-qgisMinimumVersion=2.2
+qgisMinimumVersion=2.4
 description=Electorate Redistricting and Equalisation
-about=Redistricting for QGIS uses the Tindak Malaysia (tindakmalaysia.org) method of constituency equalisation.
-version=0.1
-author=Sean Lin
-email=seanlinmt@clearpixels.co.nz
+about=Redistricting and electoral equalisation tool. Flexible configuration and equalisation parameters.
+version=0.2
+author=Sean Claude
+email=seanclaude666@gmail.com
 tags=vector, districting, democracy, delimitation
 homepage=http://www.tindakmalaysia.org
-repository=https://github.com/seanlinmt/Redistricting
-tracker=https://github.com/seanlinmt/Redistricting/issues
+repository=https://github.com/seanclaude/Redistricting
+tracker=https://github.com/seanclaude/Redistricting/issues
 experimental=False
 deprecated=False
 icon=icon.png

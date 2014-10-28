@@ -56,10 +56,10 @@ def extend_qgis_interface(instance):
     def info(self, message, duration=2):
         self.messageBar().pushMessage("Info", message, QgsMessageBar.INFO, duration)
 
-    def warning(self, message, duration=3):
+    def warning(self, message, duration=8):
         self.messageBar().pushMessage("Warning", message, QgsMessageBar.WARNING, duration)
 
-    def error(self, message, duration=4):
+    def error(self, message, duration=10):
         self.messageBar().pushMessage("Error", message, QgsMessageBar.CRITICAL, duration)
 
     attach_method(info, instance, QgisInterface)

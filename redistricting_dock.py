@@ -21,13 +21,14 @@
  ***************************************************************************/
 """
 import json
-import re
-from qgis.core import QgsPalLayerSettings, QgsSymbolV2, QgsRendererCategoryV2, \
+from qgis._core import QgsRectangle
+from qgis.core import QgsVectorLayer, QgsPalLayerSettings, QgsSymbolV2, QgsRendererCategoryV2, \
     QgsCategorizedSymbolRendererV2, QgsFeatureRequest, QgsFeature, QgsGeometry, QgsExpression, QgsMapLayerRegistry
 from qgis.gui import *
-from PyQt4 import uic
-from PyQt4.QtCore import Qt, SIGNAL, QObject, pyqtSignal
-from PyQt4.QtGui import QComboBox, QDockWidget, QColor, QFileDialog, QMessageBox, QDialog, QTableWidgetItem, QLineEdit
+from PyQt4 import uic, QtGui
+from PyQt4.QtCore import Qt, SIGNAL, QObject, pyqtSignal, QVariant
+from PyQt4.QtGui import QComboBox, QDockWidget, QColor, QFileDialog, QMessageBox, QDialog, QLineEdit, \
+    QFont
 from configuration import *
 import configuration
 from helper.qgis_util import extend_qgis_interface
@@ -41,7 +42,7 @@ FORM_CLASS, _ = uic.loadUiType(os.path.join(os.path.dirname(__file__), 'ui_delim
 CONFIG_FORM_CLASS, _ = uic.loadUiType(os.path.join(os.path.dirname(__file__), 'ui_configuration.ui'))
 
 RESX = {
-    "balancer_not_started": tr("Action aborted. Balancer not started.")
+    "balancer_not_started": tr("Action aborted. Press the start button first.")
 }
 
 
@@ -87,7 +88,6 @@ class RedistrictingDock(QDockWidget, FORM_CLASS):
         self.clickTool = None
         self.clicked_feature_id = None
 
-        self.layer_id = None
         self.layer = None
         self.context_fieldname = None
         self.polling_old_fieldname = None
@@ -114,7 +114,6 @@ class RedistrictingDock(QDockWidget, FORM_CLASS):
                         self.live_show)
         QObject.connect(self.selector_par, SIGNAL('currentIndexChanged(const QString&)'),
                         self.live_show)
-
         # http://qgis.org/api/classQgsMapCanvas.html
         self.cb_label.stateChanged.connect(self.label_handler)
         self.cb_feature_id.stateChanged.connect(self.label_handler)
@@ -124,6 +123,10 @@ class RedistrictingDock(QDockWidget, FORM_CLASS):
         QObject.connect(self.btReset, SIGNAL("clicked()"), self.fields_reset)
         QObject.connect(self.btUpdateAttributes, SIGNAL("clicked()"), self.selection_update)
         self.iface.mapCanvas().layersChanged.connect(self.layer_changed)
+        QObject.connect(self.selector_layers, SIGNAL('currentIndexChanged(int)'),
+                        self.layer_preload)
+
+        self.table_topo.cellClicked.connect(self.topology_cell_clicked)
 
         # populate state
         self.populate_state_selector()
@@ -134,25 +137,25 @@ class RedistrictingDock(QDockWidget, FORM_CLASS):
     def statistics_update(self):
         self.label_context_total.setText(str(self.balancer_old.total_voters))
         self.label_context_label.setText("{}".format(self.context_fieldname))
-        _par_range_old = QTableWidgetItem("{:.2f}%/{:.2f}/{:.2f}%"
+        _par_range_old = QtGui.QTableWidgetItem("{:.2f}%/{:.2f}/{:.2f}%"
                                           .format(self.balancer_old.parmin_actual_precentage,
                                                   self.balancer_old.par_average,
                                                   self.balancer_old.parmax_actual_precentage))
         _par_range_old.setTextAlignment(Qt.AlignHCenter | Qt.AlignVCenter)
         self.tableStatistics.setItem(0, 1, _par_range_old)
-        _state_range_old = QTableWidgetItem("{:.2f}%/{:.2f}/{:.2f}%"
+        _state_range_old = QtGui.QTableWidgetItem("{:.2f}%/{:.2f}/{:.2f}%"
                                             .format(self.balancer_old.statemin_actual_precentage,
                                                     self.balancer_old.state_average,
                                                     self.balancer_old.statemax_actual_precentage))
         _state_range_old.setTextAlignment(Qt.AlignHCenter | Qt.AlignVCenter)
         self.tableStatistics.setItem(2, 1, _state_range_old)
-        _par_range_new = QTableWidgetItem("{:.2f}%/{:.2f}/{:.2f}%"
+        _par_range_new = QtGui.QTableWidgetItem("{:.2f}%/{:.2f}/{:.2f}%"
                                           .format(self.balancer_new.parmin_actual_precentage,
                                                   self.balancer_new.par_average_target,
                                                   self.balancer_new.parmax_actual_precentage))
         _par_range_new.setTextAlignment(Qt.AlignHCenter | Qt.AlignVCenter)
         self.tableStatistics.setItem(1, 1, _par_range_new)
-        _state_range_new = QTableWidgetItem("{:.2f}%/{:.2f}/{:.2f}%"
+        _state_range_new = QtGui.QTableWidgetItem("{:.2f}%/{:.2f}/{:.2f}%"
                                             .format(self.balancer_new.statemin_actual_precentage,
                                                     self.balancer_new.state_average_target,
                                                     self.balancer_new.statemax_actual_precentage))
@@ -160,6 +163,11 @@ class RedistrictingDock(QDockWidget, FORM_CLASS):
         self.tableStatistics.setItem(3, 1, _state_range_new)
 
     def live_show(self):
+        """update totals and statistics"""
+
+        if not self.layer:
+            return
+
         selectedfeatureids = self.layer.selectedFeaturesIds()
         current_state = self.selector_state.itemData(self.selector_state.currentIndex())
         current_par = self.selector_par.itemData(self.selector_par.currentIndex())
@@ -200,6 +208,8 @@ class RedistrictingDock(QDockWidget, FORM_CLASS):
         self.statistics_update()
 
     def fields_duplicate_old(self):
+        import re
+
         confirmation = QMessageBox.question(self,
                                             "Overwrite values",
                                             "Are you sure? Any newly allocated IDs will be overwritten.",
@@ -306,7 +316,7 @@ class RedistrictingDock(QDockWidget, FORM_CLASS):
 
         self.palyr.writeToLayer(self.layer)
 
-    def combobox_state_save(self):
+    def ui_state_save(self):
         saved_state = {}
         for widget in self.findChildren(QComboBox):
             saved_state.update({widget.objectName(): widget.currentIndex()})
@@ -316,7 +326,7 @@ class RedistrictingDock(QDockWidget, FORM_CLASS):
 
         Configuration().store_qt(Configuration.UI_STATE, json.dumps(saved_state))
 
-    def combobox_state_load(self, excludes=None):
+    def ui_state_load(self, excludes=None):
         if not excludes:
             excludes = []
         try:
@@ -332,13 +342,64 @@ class RedistrictingDock(QDockWidget, FORM_CLASS):
             if widget.objectName() in saved_state and widget.objectName() not in excludes:
                 widget.setText(saved_state[widget.objectName()])
 
+    def layer_select(self):
+        startdir = Configuration().read_qt(Configuration.SRC_DIR)
+        filepath = QFileDialog.getOpenFileName(parent=self,
+                                               caption='Select shapefile',
+                                               filter="*.shp",
+                                               directory=startdir)
+        if filepath:
+            path, filename = os.path.split(filepath)
+
+            # remember selected path
+            Configuration().store_qt(Configuration.SRC_DIR, path)
+
+            name, ext = os.path.splitext(filename)
+            # don't assign layer to self yet. only after balancer has started
+            layer = QgsVectorLayer(filepath, name, "ogr")
+            # layer = self.iface.addVectorLayer(filepath, name, "ogr")
+            if not layer.isValid():
+                self.iface.error("Layer failed to load!")
+                return
+
+            QgsMapLayerRegistry().instance().addMapLayer(layer)
+            self.selector_layers.addItem(layer.name(), layer.id())
+
+    def layer_preload(self, index):
+        layer_id = self.selector_layers.itemData(index)
+
+        for layer in self.iface.mapCanvas().layers():
+            if layer.id() == layer_id:
+                self.layer = layer
+                self.layer_load()
+
     def layer_changed(self):
-        layer_ok = self.layer_validate()
+        layer_found = False
+        selected_index = self.selector_layers.currentIndex()
+        layer_id = self.selector_layers.itemData(selected_index)
 
-        if self.balancer_started and not layer_ok:
-            self.balancer_stop()
-            return
+        for layer in self.iface.mapCanvas().layers():
+            # add layer if it's not in the list
+            if layer.id() == layer_id:
+                layer_found = True
+            elif self.selector_layers.findData(layer.id()) == -1 and \
+                            layer.type() == layer.VectorLayer and \
+                            layer.geometryType() == 2:
+                self.selector_layers.addItem(layer.name(), layer.id())
 
+        if not layer_found:
+            self.selector_layers.removeItem(selected_index)
+            self.layer_selectors_clear()
+
+            if self.balancer_started:
+                self.balancer_stop()
+
+        # if not self.layer or self.layer.id() != layer_id:
+        self.layer_preload(selected_index)
+
+        return layer_found
+
+    def layer_selectors_clear(self):
         self.selector_context.clear()
         self.selector_polling_old.clear()
         self.selector_state_old.clear()
@@ -347,32 +408,41 @@ class RedistrictingDock(QDockWidget, FORM_CLASS):
         self.selector_par_new.clear()
         self.selector_polling_new.clear()
 
-        self.selector_context.addItem("Select context ...", "")
-        self.selector_polling_old.addItem("Select area ...", "")
+        self.selector_context.addItem("Select field ...", "")
+        self.selector_polling_old.addItem("Select poll district ...", "")
         self.selector_state_old.addItem("Select state ...", "")
         self.selector_par_old.addItem("Select par ...", "")
         self.selector_state_new.addItem("Select state ...", "")
         self.selector_par_new.addItem("Select par ...", "")
-        self.selector_polling_new.addItem("Select area ...", "")
+        self.selector_polling_new.addItem("Select poll district ...", "")
+
+    def layer_load(self):
+        self.layer_selectors_clear()
 
         if self.layer is None:
             return
 
+        self.iface.info("Reading layer definition {}".format(self.layer.id()))
         provider = self.layer.dataProvider()
         fields = provider.fields()
-        for field in fields:
-            self.selector_context.addItem(field.name(), field.name())
-            self.selector_polling_old.addItem(field.name(), field.name())
-            self.selector_state_old.addItem(field.name(), field.name())
-            self.selector_par_old.addItem(field.name(), field.name())
-            self.selector_state_new.addItem(field.name(), field.name())
-            self.selector_par_new.addItem(field.name(), field.name())
-            self.selector_polling_new.addItem(field.name(), field.name())
-
-        del provider
+        try:
+            for field in fields:
+                field_name = field.name()
+                self.selector_context.addItem(field_name, field_name)
+                self.selector_polling_old.addItem(field_name, field_name)
+                self.selector_state_old.addItem(field_name, field_name)
+                self.selector_par_old.addItem(field_name, field_name)
+                self.selector_state_new.addItem(field_name, field_name)
+                self.selector_par_new.addItem(field_name, field_name)
+                self.selector_polling_new.addItem(field_name, field_name)
+        except Exception, e:
+            self.iface.error(e.message)
+        finally:
+            del provider
 
         # load save state
-        self.combobox_state_load(["selector_layers"])
+        # todo: can't figure out why the following controls currentIndex() keeps changing after selection
+        self.ui_state_load(["selector_layers", "selector_map_type"])
 
     def layer_redraw(self, zoom_to_layer=True):
         if not self.balancer_started:
@@ -461,10 +531,13 @@ class RedistrictingDock(QDockWidget, FORM_CLASS):
         self.layer.setRendererV2(renderer)
         # self.iface.mapCanvas().setDirty(True)
         # self.iface.mapCanvas().clearCache()
-        #if zoom_to_layer:
-        #    self.iface.mapCanvas().setExtent(self.layer.extent())
-        #    self.iface.mapCanvas().zoomToNextExtent()
+        # if zoom_to_layer:
+        # self.iface.mapCanvas().setExtent(self.layer.extent())
+        # self.iface.mapCanvas().zoomToNextExtent()
         self.iface.mapCanvas().refresh()
+
+        # update info
+        self.label_map_type.setText(self.selector_map_type.currentText())
 
     def layer_renumber(self):
         confirmation = QMessageBox.question(self,
@@ -509,7 +582,9 @@ class RedistrictingDock(QDockWidget, FORM_CLASS):
             else:
                 self.layer.modifySelection(ids, [])
 
-    def canvas_clicked(self, point, button):
+    def canvas_clicked(self, p, button):
+        import re
+
         if not self.balancer_started:
             self.iface.warning(RESX["balancer_not_started"])
             return
@@ -521,27 +596,20 @@ class RedistrictingDock(QDockWidget, FORM_CLASS):
         # self.iface.info("clicked = %s,%s" % (str(point.x()), str(point.y())))
 
         # setup the provider select to filter results based on a rectangle
-        point = QgsGeometry().fromPoint(point)
-        # scale-dependent buffer of 1 pixels-worth of map units
-        buff = point.buffer((self.iface.mapCanvas().mapUnitsPerPixel() * 1), 0)
+        point = QgsGeometry().fromPoint(p)
+        # scale-dependent buffer of 2 pixels-worth of map units
+        buff = point.buffer((self.iface.mapCanvas().mapUnitsPerPixel() * 2), 0)
         rect = buff.boundingBox()
-        rect.normalize()
-
-        # set up featureReq
-        req = QgsFeatureRequest()
-        req.setFilterRect(rect)
-        req.setFlags(QgsFeatureRequest.NoGeometry)
-        fit = self.layer.getFeatures(req)
 
         feats = []
-        f = QgsFeature()
-        while fit.nextFeature(f):
-            feats.append(f)
+        for f in self.layer.getFeatures():
+            if f.geometry().intersects(rect):
+                feats.append(f)
 
         if feats.__len__() == 0:
             return
         elif feats.__len__() != 1:
-            self.iface.warning("{} features clicked".format(feats.__len__()))
+            self.iface.warning("{} features clicked. Try clicking and zooming around a little. :)".format(feats.__len__()))
 
         changed_feature = feats[0]
         self.clicked_feature_id = changed_feature.id()
@@ -592,7 +660,7 @@ class RedistrictingDock(QDockWidget, FORM_CLASS):
 
         confirmation = QMessageBox.question(self,
                                             "Confirm action",
-                                            "Add selection to the following constituencies?\n" +
+                                            "Move selected features to the following constituencies?\n\n" +
                                             "Parliament:{}\nState:{}".format(current_par, current_state),
                                             QMessageBox.Yes | QMessageBox.No)
         if confirmation == QMessageBox.Yes:
@@ -629,101 +697,83 @@ class RedistrictingDock(QDockWidget, FORM_CLASS):
 
         self.layer.setSelectedFeatures([])
 
-    def layer_select(self, event):
-        startdir = Configuration().read_qt(Configuration.SRC_DIR)
-        filepath = QFileDialog.getOpenFileName(parent=self,
-                                               caption='Select shapefile',
-                                               filter="*.shp",
-                                               directory=startdir)
-        if filepath:
-            path, filename = os.path.split(filepath)
+    def topology_cell_clicked(self, row, column):
+        import re
 
-            # remember selected path
-            Configuration().store_qt(Configuration.SRC_DIR, path)
+        # unselect first
+        self.selection_clear()
 
-            name, ext = os.path.splitext(filename)
-            # don't assign layer to self yet. only after balancer has started
-            layer = self.iface.addVectorLayer(filepath, name, "ogr")
-            if not layer.isValid():
-                self.iface.error("Layer failed to load!")
-                return
+        id_cell = self.table_topo.item(row, 2)  # get state id
+        if not id_cell:
+            self.iface.error("No data to identify features for selection")
+            return
 
-            self.layer_id = layer.id()
-            self.tbLayer.setText(filename)
-            self.tbLayer.setToolTip(filepath)
+        state_id = int(re.search(r'\d+', id_cell.text()).group()).__str__()
 
-            # continues in layer_changed ...
+        balancer = self.get_balancer()
 
-    def layer_validate(self):
-        ok = False
-        for layer in self.iface.mapCanvas().layers():
-            if layer.id() == self.layer_id:
-                self.layer = layer
-                ok = True
+        ids = [int(k) for k, v in balancer.topology_polling.items()
+               if v[balancer.state_field] == state_id]
 
-        if not ok:
-            self.tbLayer.setText('')
-            self.tbLayer.setToolTip('')
-
-        return ok
+        self.layer.modifySelection(ids, [])
+        self.iface.mapCanvas().panToSelected()
+        self.live_show()
 
     def topology_display(self):
         if not self.balancer_started:
             self.iface.warning(RESX["balancer_not_started"])
             return
 
-        selected_index = self.selector_topo_type.currentIndex()
-
-        if selected_index == 0:
-            balancer = self.balancer_old
-        else:
-            balancer = self.balancer_new
+        balancer = self.get_balancer()
 
         pars = sorted(balancer.map_par_state.items())
         rows = []
         for par in pars:
-            rows.append((balancer.par_prefix_format % int(par[0]),
-                         par[1]['states'].keys().__len__(),
-                         par[1]['d'],
-                         par[1]['voters']))
+            par_id = balancer.par_prefix_format % int(par[0])
+            par_size = par[1]['voters']
+            par_dev = par[1]['d']
             for state in sorted(par[1]['states'].items()):
-                rows.append(("", balancer.state_prefix_format % int(state[0]), state[1]))
+                state_id = balancer.state_prefix_format % int(state[0])
+                state_size = state[1][0]
+                state_dev = state[1][1]
+                rows.append((par_id,
+                             ("{} ({}%)".format(par_size, par_dev), par_size),
+                             state_id,
+                             ("{} ({}%)".format(state_size, state_dev), state_size)))
 
-        # extra 2 for unused info rows and +1 for header row
         self.table_topo.setRowCount(1)
-        self.table_topo.setRowCount(rows.__len__() - balancer.map_par_state.keys().__len__() + 2)
+        self.table_topo.setRowCount(rows.__len__())
 
-        par_cell = None
         row_count = 0
         for row in rows:
-            if row[0]:
-                par_cell = QTableWidgetItem("{}\n{}\n{}".format(row[0], row[3], row[2])), row[1]
-            else:
-                if par_cell:
-                    self.table_topo.setItem(row_count, 0, QTableWidgetItem(par_cell[0]))
-                    self.table_topo.setSpan(row_count, 0, par_cell[1], 1)
-                    par_cell = None
+            pname = QtGui.QTableWidgetItem(row[0])
+            pname.setTextAlignment(Qt.AlignHCenter | Qt.AlignVCenter)
+            self.table_topo.setItem(row_count, 0, pname)
 
-                self.table_topo.setItem(row_count, 1, QTableWidgetItem(row[1]))
-                self.table_topo.setItem(row_count, 2, QTableWidgetItem(row[2]))
-                row_count += 1
+            psize = QTableWidgetNumberItem(row[1][0], row[1][1])
+            psize.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            self.table_topo.setItem(row_count, 1, psize)
 
-        unused_header = QTableWidgetItem("Unused codes")
-        unused_header.setTextAlignment(Qt.AlignHCenter | Qt.AlignVCenter)
-        self.table_topo.setItem(row_count, 0, unused_header)
-        self.table_topo.setSpan(row_count, 0, 1, 3)
+            sname = QtGui.QTableWidgetItem(row[2])
+            sname.setTextAlignment(Qt.AlignHCenter | Qt.AlignVCenter)
+            self.table_topo.setItem(row_count, 2, sname)
 
-        row_count += 1
+            ssize = QTableWidgetNumberItem(row[3][0], row[3][1])
+            ssize.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            self.table_topo.setItem(row_count, 3, ssize)
+
+            row_count += 1
+
         unused_totals = balancer.get_unused()
         if unused_totals[0].__len__() == 0:
-            par_cell = QTableWidgetItem('')
+            self.label_free_pars.setText("-")
         else:
-            par_cell = QTableWidgetItem(", ".join(unused_totals[0]))
-        self.table_topo.setItem(row_count, 0, par_cell)
+            self.label_free_pars.setText(", ".join(unused_totals[0]))
 
-        state_cell = QTableWidgetItem(", ".join(unused_totals[1]))
-        self.table_topo.setItem(row_count, 1, state_cell)
-        self.table_topo.setItem(row_count, 2, QTableWidgetItem(''))
+        if unused_totals[1].__len__() == 0:
+            self.label_free_states.setText("-")
+        else:
+            self.label_free_states.setText(", ".join(unused_totals[1]))
 
     def balancer_handler(self):
         if self.balancer_started:
@@ -732,6 +782,8 @@ class RedistrictingDock(QDockWidget, FORM_CLASS):
             self.balancer_start()
 
     def get_balancer(self):
+        assert self.selector_map_type.currentIndex() != -1
+
         if self.selector_map_type.currentIndex() == 0:
             return self.balancer_old
 
@@ -744,18 +796,47 @@ class RedistrictingDock(QDockWidget, FORM_CLASS):
         return delta
 
     def balancer_start(self):
-        if not self.layer_validate():
+        # save state
+        self.ui_state_save()
+
+        start_ok = self.layer_changed()
+        if not start_ok or not self.layer:
             self.iface.error("Balancer not started. Layer is missing, invalid or changed externally.")
             return
 
+        self.iface.mapCanvas().setCurrentLayer(self.layer)
+        provider = self.layer.dataProvider()
+        err_fields = []
+
         self.context_fieldname = self.selector_context.itemData(self.selector_context.currentIndex())
+        if provider.fields().at(provider.fieldNameIndex(self.context_fieldname)).type() != QVariant.Int:
+            self.iface.error("The {} attribute field must be an integer field.".format(self.context_fieldname))
+            del provider
+            return
+
         self.polling_old_fieldname = self.selector_polling_old.itemData(self.selector_polling_old.currentIndex())
-        self.state_old_fieldname = self.selector_state_old.itemData(self.selector_state_old.currentIndex())
-        self.par_old_fieldname = self.selector_par_old.itemData(self.selector_par_old.currentIndex())
-        self.state_new_fieldname = self.selector_state_new.itemData(self.selector_state_new.currentIndex())
-        self.par_new_fieldname = self.selector_par_new.itemData(self.selector_par_new.currentIndex())
-        self.polling_new_fieldname = self.selector_polling_new.itemData(self.selector_polling_new.currentIndex())
         self.par_new_prefix = self.selector_target_state.itemData(self.selector_target_state.currentIndex())
+
+        # the following needs to be text fields
+        self.state_old_fieldname = self.selector_state_old.itemData(self.selector_state_old.currentIndex())
+        if provider.fields().at(provider.fieldNameIndex(self.state_old_fieldname)).type() != QVariant.String:
+            err_fields.append(self.state_old_fieldname)
+        self.par_old_fieldname = self.selector_par_old.itemData(self.selector_par_old.currentIndex())
+        if provider.fields().at(provider.fieldNameIndex(self.par_old_fieldname)).type() != QVariant.String:
+            err_fields.append(self.par_old_fieldname)
+        self.state_new_fieldname = self.selector_state_new.itemData(self.selector_state_new.currentIndex())
+        if provider.fields().at(provider.fieldNameIndex(self.state_new_fieldname)).type() != QVariant.String:
+            err_fields.append(self.state_new_fieldname)
+        self.par_new_fieldname = self.selector_par_new.itemData(self.selector_par_new.currentIndex())
+        if provider.fields().at(provider.fieldNameIndex(self.par_new_fieldname)).type() != QVariant.String:
+            err_fields.append(self.par_new_fieldname)
+        self.polling_new_fieldname = self.selector_polling_new.itemData(self.selector_polling_new.currentIndex())
+
+        del provider
+
+        if err_fields.__len__() != 0:
+            self.iface.error("The following fields must be text fields: {}".format(", ".join(err_fields)))
+            return
 
         delta = self.get_delta()
         if (not self.context_fieldname or
@@ -792,44 +873,18 @@ class RedistrictingDock(QDockWidget, FORM_CLASS):
                                          self.balancer_old.state_count,
                                          state_prefix_format="N%03d",
                                          par_prefix_format="{}%02d".format(self.par_new_prefix))
-        except ValueError:
-            self.iface.error("The specified context field is not a number")
+        except AttributeError:
+            self.iface.error("Specified fields must be part of a sequence of numbers")
+            self.balancer_new = None
+            self.balancer_old = None
             return
 
         self.layer.selectionChanged.connect(self.live_show)
 
         self.btRebalance.setStyleSheet("background-color: red")
-        self.btRebalance.setText("Stop Balancer")
-        self.selector_target_state.setEnabled(False)
-        self.selector_context.setEnabled(False)
-        self.selector_polling_old.setEnabled(False)
-        self.selector_state_old.setEnabled(False)
-        self.selector_par_old.setEnabled(False)
-        self.selector_state_new.setEnabled(False)
-        self.selector_par_new.setEnabled(False)
-        self.selector_polling_new.setEnabled(False)
-        self.btLoadLayer.setEnabled(False)
-        self.tbDelta.setEnabled(False)
+        self.btRebalance.setText("Stop")
 
         self.statistics_update()
-
-        self.btDuplicate.setEnabled(True)
-        self.btClearSelected.setEnabled(True)
-        self.btReset.setEnabled(True)
-        self.selector_map_type.setEnabled(True)
-        self.selector_seat_type.setEnabled(True)
-        self.selector_overlay_type.setEnabled(True)
-        self.btRenumber.setEnabled(True)
-
-        # checkboxes
-        self.cb_label.setEnabled(True)
-        self.cb_feature_id.setEnabled(True)
-
-        # set following only after balancers initialised
-        self.selector_target_state.setEnabled(False)
-
-        # save state
-        self.combobox_state_save()
 
         # init click tool
         self.clickTool = DelimitationMapTool(self.iface.mapCanvas())
@@ -840,8 +895,9 @@ class RedistrictingDock(QDockWidget, FORM_CLASS):
         self.clickTool.canvasDoubleClicked.connect(self.canvas_doubleclicked)
 
         self.balancer_started = True
+        self.panel_active.setCurrentIndex(1)
         self.iface.info("{} features found. Balancer started ({})."
-                        .format(self.balancer_old.get_features_total()[2], self.layer_id), 4)
+                        .format(self.balancer_old.get_features_total()[2], self.layer.id()), 4)
         self.layer_redraw()
 
     def feature_selector_init(self):
@@ -867,42 +923,19 @@ class RedistrictingDock(QDockWidget, FORM_CLASS):
             return
 
         if self.clickTool:
-            self.iface.mapCanvas().unsetMapTool(self.clickTool)
             self.clickTool.canvasDoubleClicked.disconnect(self.canvas_doubleclicked)
             if QObject:
                 QObject.disconnect(self.clickTool,
                                    SIGNAL("canvasClicked(const QgsPoint &, Qt::MouseButton)"),
                                    self.canvas_clicked)
+            self.iface.mapCanvas().unsetMapTool(self.clickTool)
 
         self.btRebalance.setStyleSheet("background-color: green")
-        self.btRebalance.setText("Start Balancer")
-        self.selector_target_state.setEnabled(True)
-        self.selector_context.setEnabled(True)
-        self.selector_polling_old.setEnabled(True)
-        self.selector_state_old.setEnabled(True)
-        self.selector_par_old.setEnabled(True)
-        self.selector_state_new.setEnabled(True)
-        self.selector_par_new.setEnabled(True)
-        self.selector_polling_new.setEnabled(True)
-        self.btLoadLayer.setEnabled(True)
-        self.tbDelta.setEnabled(True)
-
-        # disable
-        self.btDuplicate.setEnabled(False)
-        self.btClearSelected.setEnabled(False)
-        self.btReset.setEnabled(False)
-        self.selector_map_type.setEnabled(False)
-        self.selector_seat_type.setEnabled(False)
-        self.selector_overlay_type.setEnabled(False)
-        self.btRenumber.setEnabled(False)
-
-        # checkboxes
-        self.cb_label.setEnabled(False)
-        self.cb_feature_id.setEnabled(False)
+        self.btRebalance.setText("Start")
+        self.panel_active.setCurrentIndex(0)
 
         self.balancer_started = False
         self.layer = None
-        # self.layer_id = None
         self.iface.info("Balancer stopped")
 
 
@@ -973,3 +1006,12 @@ class DelimitationMapTool(QgsMapToolEmitPoint, object):
         point = self.toMapCoordinates(e.pos())
         self.canvasDoubleClicked.emit(point, e.button())
         # super(DelimitationMapTool, self).canvasDoubleClickEvent(e)
+
+
+class QTableWidgetNumberItem(QtGui.QTableWidgetItem):
+    def __init__(self, displaydata, number):
+        QtGui.QTableWidgetItem.__init__(self, displaydata, QtGui.QTableWidgetItem.UserType)
+        self.__number = number
+
+    def __lt__(self, other):
+        return self.__number < other.__number
