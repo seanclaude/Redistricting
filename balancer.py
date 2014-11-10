@@ -21,6 +21,7 @@
 
 import math
 import colouring
+from configuration import KEY_CIRCULARITY, KEY_COMPACTNESS, KEY_AREA, KEY_GEOMETRY, KEY_VOTERS, KEY_STATES
 from enum import Enum
 from helper.ui import QgisMessageBarProgress, isnull
 from qgis.core import QgsVectorLayer, QgsFeature, QgsPoint, QgsGeometry
@@ -35,19 +36,24 @@ class EqualStatus(Enum):
 
 class Balancer(object):
     def __init__(self, name, layer, voters_field, polling_field, state_field, par_field, delta,
-                 par_average_target=None,
-                 state_average_target=None,
                  par_count_limit=None,
                  state_count_limit=None,
                  state_prefix_format="%02d",
-                 par_prefix_format="%03d"):
+                 par_prefix_format="%03d",
+                 polling_prefix_format="%d",
+                 readonly=True):
 
         self.name = name
         self.total_voters = 0
+        self.readonly = readonly
+
+        # storage - they keep growing!
         self.topology_polling = {}
         self.topology_state = {}
         self.topology_par = {}
         self.map_par_state = {}
+        self.par_statistics = {}
+        self.state_statistics = {}
         self.layer = layer
         self.polling_field = polling_field
         self.state_field = state_field
@@ -61,7 +67,6 @@ class Balancer(object):
         self.par_count = 0
         self.topology_dirty = True
         self.state_average = 0
-        self.state_average_target = state_average_target
         self.statemax_target = None
         self.statemax_actual = None
         self.statemax_actual_precentage = 0.00
@@ -70,7 +75,6 @@ class Balancer(object):
         self.statemin_actual_precentage = 0.00
 
         self.par_average = 0
-        self.par_average_target = par_average_target
         self.parmax_target = None
         self.parmax_actual = None
         self.parmax_actual_precentage = 0.00
@@ -78,7 +82,7 @@ class Balancer(object):
         self.parmin_actual = None
         self.parmin_actual_precentage = 0.00
 
-        self.polling_prefix_format = "%02d"
+        self.polling_prefix_format = polling_prefix_format
         self.state_prefix_format = state_prefix_format
         self.par_prefix_format = par_prefix_format
 
@@ -97,7 +101,7 @@ class Balancer(object):
 
         self.__inprogress = False
 
-        self.load_topology()
+        self.topology_load()
 
         self.colouring_par = colouring.Colouring()
         self.colouring_state = colouring.Colouring()
@@ -137,7 +141,7 @@ class Balancer(object):
     def __box_info(self, layertype):
         info = {}
         for k, v in self.__get_layertype_features(layertype).items():
-            bbox = v['geom'].boundingBox()
+            bbox = v[KEY_GEOMETRY].boundingBox()
             info[k] = ((bbox.xMinimum() + bbox.width() / 2.0, bbox.yMinimum() + bbox.height() / 2.0), k)
         return info
 
@@ -153,7 +157,38 @@ class Balancer(object):
 
         raise Exception("Not implemented")
 
-    def init_topology(self):
+    def statistics_calculate(self, transform):
+        # todo: does not handle multipart polygons properly
+        # calculate state statistics
+        # circularity => https://sites.google.com/site/mathagainstgerrymandering/advanced-attributes#TOC-Compactness
+
+        if self.state_statistics.keys().__len__() == 0:
+            for k, v in self.topology_state.iteritems():
+                v[KEY_GEOMETRY].transform(transform)
+                area = v[KEY_GEOMETRY].area()
+                length = v[KEY_GEOMETRY].length()
+
+                self.state_statistics.update({k: {
+                    KEY_AREA: area / (1000 * 1000),
+                    KEY_CIRCULARITY: 4.0 * math.pi * area / math.pow(length, 2),
+                    KEY_COMPACTNESS: math.pow(length, 2) / area
+                }})
+
+        # calculate par statistics
+        if self.par_statistics.keys().__len__() == 0:
+            for k, v in self.topology_par.iteritems():
+                v[KEY_GEOMETRY].transform(transform)
+                area = v[KEY_GEOMETRY].area()
+                length = v[KEY_GEOMETRY].length()
+
+                self.par_statistics.update({k: {
+                    KEY_AREA: area / (1000 * 1000),
+                    KEY_CIRCULARITY: 4.0 * math.pi * area / math.pow(length, 2),
+                    KEY_COMPACTNESS: math.pow(length, 2) / area
+                }})
+
+    # todo: getFeatures no longer required since geometry info is saved
+    def topology_init(self):
         import re
 
         self.topology_polling.clear()
@@ -171,7 +206,7 @@ class Balancer(object):
                     self.state_field: None if isnull(f[self.state_field]) else int(
                         re.search(r'\d+', str(f[self.state_field])).group()).__str__(),
                     self.voters_field: int(f[self.voters_field]),
-                    "geom": f.geometryAndOwnership()
+                    KEY_GEOMETRY: QgsGeometry(f.geometry())
                 }})
                 iop += 1
                 progress.setPercentage(int(100 * iop / nop))
@@ -180,7 +215,10 @@ class Balancer(object):
         finally:
             progress.close()
 
-    def update_topology(self, dict_values):
+    def topology_update(self, dict_values):
+        if self.readonly:
+            raise Exception("Cannot write to read-only balancer")
+
         import re
 
         for k, v in dict_values.items():
@@ -188,34 +226,37 @@ class Balancer(object):
                 self.layer.changeAttributeValue(k, self.layer.fieldNameIndex(k2), v2)
                 self.topology_polling[k][k2] = int(re.search(r'\d+', str(v2)).group())
 
+        self.state_statistics.clear()
+        self.par_statistics.clear()
+
         self.topology_dirty = True
 
-    def load_topology(self):
+    def topology_load(self):
         if not self.topology_dirty:
             return
 
         self.topology_state.clear()
         self.topology_par.clear()
-        self.init_topology()
+        self.topology_init()
 
         for k, v in self.topology_polling.iteritems():
             voters_value = v[self.voters_field]
-            geom_value = v["geom"]
+            geom_value = v[KEY_GEOMETRY]
             key_state = v[self.state_field]
             key_par = v[self.par_field]
             if key_state:
-                self.topology_state.setdefault(key_state, {'voters': 0, 'geom': QgsGeometry(geom_value)})
+                self.topology_state.setdefault(key_state, {KEY_VOTERS: 0, KEY_GEOMETRY: geom_value})
                 if key_state in self.topology_state:
-                    self.topology_state[key_state]['geom'] = QgsGeometry(
-                        self.topology_state[key_state]['geom'].combine(geom_value))
-                self.topology_state[key_state]['voters'] += voters_value
+                    self.topology_state[key_state][KEY_GEOMETRY] = QgsGeometry(
+                        self.topology_state[key_state][KEY_GEOMETRY].combine(geom_value))
+                self.topology_state[key_state][KEY_VOTERS] += voters_value
 
             if key_par:
-                self.topology_par.setdefault(key_par, {'voters': 0, 'geom': QgsGeometry(geom_value)})
+                self.topology_par.setdefault(key_par, {KEY_VOTERS: 0, KEY_GEOMETRY: geom_value})
                 if key_par in self.topology_par:
-                    self.topology_par[key_par]['geom'] = QgsGeometry(
-                        self.topology_par[key_par]['geom'].combine(geom_value))
-                self.topology_par[key_par]['voters'] += voters_value
+                    self.topology_par[key_par][KEY_GEOMETRY] = QgsGeometry(
+                        self.topology_par[key_par][KEY_GEOMETRY].combine(geom_value))
+                self.topology_par[key_par][KEY_VOTERS] += voters_value
 
         self.calculate_limits(self.delta)
         self.init_par_state_map()
@@ -226,10 +267,10 @@ class Balancer(object):
         if not value:
             return None
 
-        if value['voters'] > self.statemax_target:
+        if value[KEY_VOTERS] > self.statemax_target:
             return self.colouring_state.colours_red[colour_index - 1]
 
-        if value['voters'] < self.statemin_target:
+        if value[KEY_VOTERS] < self.statemin_target:
             return self.colouring_state.colours_blue[colour_index - 1]
 
         return self.colouring_state.colours_grey[colour_index - 1]
@@ -239,10 +280,10 @@ class Balancer(object):
         if not value:
             return None
 
-        if value['voters'] > self.parmax_target:
+        if value[KEY_VOTERS] > self.parmax_target:
             return self.colouring_par.colours_red[colour_index - 1]
 
-        if value['voters'] < self.parmin_target:
+        if value[KEY_VOTERS] < self.parmin_target:
             return self.colouring_par.colours_blue[colour_index - 1]
 
         return self.colouring_par.colours_grey[colour_index - 1]
@@ -259,35 +300,53 @@ class Balancer(object):
 
             self.map_par_state \
                 .setdefault(par_key, {"d": "{:.2f}".format(self.get_par_deviation(par_key)),
-                                      "states": {},
-                                      "voters": self.get_par_voters(par_key)})
+                                      KEY_STATES: {},
+                                      KEY_VOTERS: self.get_par_voters(par_key)})
 
             if not state_key:
                 continue
 
-            if state_key not in self.map_par_state[par_key]['states']:
+            if state_key not in self.map_par_state[par_key][KEY_STATES]:
                 voters_dev_tuple = self.get_state_voters_and_deviation(state_key)
-                self.map_par_state[par_key]['states'] \
+                self.map_par_state[par_key][KEY_STATES] \
                     .update({state_key: (voters_dev_tuple[0], "{:.2f}".format(voters_dev_tuple[1]))})
 
     def get_par_voters(self, par_name):
-        if not par_name:
+        if not par_name or not par_name in self.topology_par:
             return 0
 
-        return self.topology_par[par_name]['voters']
+        return self.topology_par[par_name][KEY_VOTERS]
 
     def get_par_deviation(self, par_name):
-        if not par_name:
+        if not par_name or not par_name in self.topology_par:
             return 0.0
 
-        return (self.topology_par[par_name]['voters'] - self.par_average) * 100 / self.par_average
+        return (self.topology_par[par_name][KEY_VOTERS] - self.par_average) * 100 / self.par_average
 
     def get_state_voters_and_deviation(self, state_name):
-        if not state_name:
+        if not state_name or not state_name in self.topology_state:
             return 0, 0.0
 
-        voters = self.topology_state[state_name]['voters']
+        voters = self.topology_state[state_name][KEY_VOTERS]
         return voters, (voters - self.state_average) * 100 / self.state_average
+
+    def get_feature_label(self):
+        if self.readonly:
+            return """CASE
+                        WHEN
+                            {0} IS NULL or {1} IS NULL THEN ''
+                            ELSE concat(toint(regexp_substr({0}, '(\\\d+)')),
+                                '/', toint(regexp_substr({1}, '(\\\d+)')),
+                                CASE WHEN {2} IS NULL THEN ''
+                                ELSE concat('/', toint(regexp_substr(coalesce({2},''), '(\\\d+)'))) END)
+                        END""".format(self.par_field, self.state_field, self.polling_field)
+
+        return """CASE
+                        WHEN
+                            {0} IS NULL or {1} IS NULL THEN ''
+                            ELSE concat(toint(regexp_substr({0}, '(\\\d+)')),
+                                '/', toint(regexp_substr({1}, '(\\\d+)')))
+                        END""".format(self.par_field, self.state_field)
 
     def get_par_code_sequence(self):
         if self.topology_par.keys().__len__():
@@ -300,61 +359,65 @@ class Balancer(object):
     def get_state_code_sequence(self):
         return [s for s in range(1, self.state_count_limit + 1)]
 
-    def get_recommendation(self):
+    def recommendation_by_par(self, par_name):
+
+        voters_par = self.get_par_voters(par_name)
+
+        if not self.state_average or not voters_par:
+            return ""
+
         # get min/max for number of state seats in a par
         seats_state_min = math.floor(1.0 * self.state_count_limit / self.par_count_limit)
         seats_state_max = math.ceil(1.0 * self.state_count_limit / self.par_count_limit)
         seats_extras = self.state_count_limit % self.par_count_limit
 
-        # recommended size (voters)
-        # recommended_par
+        dun_size_with_max_seats = float(voters_par) / seats_state_max
+        delta_max = math.fabs(self.state_average - dun_size_with_max_seats)
+        dun_size_with_min_seats = float(voters_par) / seats_state_min
+        delta_min = math.fabs(self.state_average - dun_size_with_min_seats)
+
+        if delta_max < delta_min:
+            return "{} STATE seats".format(int(seats_state_max))
+        elif delta_max > delta_min:
+            return "{} STATE seats".format(int(seats_state_min))
+        else:
+            return "{} STATE seats".format(int(seats_state_max))
+
+            # recommended size (voters)
+            # recommended_par
 
     def calculate_limits(self, delta):
         self.delta = delta
-        self.total_voters = sum([v['voters'] for k, v in self.topology_par.iteritems()])
+        self.total_voters = sum([v[self.voters_field] for k, v in self.topology_polling.iteritems()])
         self.state_count = self.topology_state.keys().__len__()
         self.par_count = self.topology_par.keys().__len__()
 
-        if not self.state_count:
-            self.state_average = float(self.total_voters) / self.state_count_limit
-        else:
-            self.state_average = float(self.total_voters) / self.state_count
+        # for old topo
+        if not self.state_count_limit:
+            self.state_count_limit = self.state_count
 
-            # for old topo
-            if not self.state_count_limit:
-                self.state_count_limit = self.state_count
-
-        if self.state_average_target:
-            self.state_average = self.state_average_target
-
+        self.state_average = float(self.total_voters) / self.state_count_limit
         self.statemax_target = self.state_average + self.delta * self.state_average
         self.statemin_target = self.state_average - self.delta * self.state_average
 
         if self.state_count:
-            self.statemax_actual = max(v['voters'] for v in self.topology_state.values())
+            self.statemax_actual = max(v[KEY_VOTERS] for v in self.topology_state.values())
             self.statemax_actual_precentage = (self.statemax_actual - self.state_average) * 100 / self.state_average
-            self.statemin_actual = min(v['voters'] for v in self.topology_state.values())
+            self.statemin_actual = min(v[KEY_VOTERS] for v in self.topology_state.values())
             self.statemin_actual_precentage = (self.statemin_actual - self.state_average) * 100 / self.state_average
 
-        if not self.par_count:
-            self.par_average = float(self.total_voters) / self.par_count_limit
-        else:
-            self.par_average = float(self.total_voters) / self.par_count
+        # for old topo
+        if not self.par_count_limit:
+            self.par_count_limit = self.par_count
 
-            # for old topo
-            if not self.par_count_limit:
-                self.par_count_limit = self.par_count
-
-        if self.par_average_target:
-            self.par_average = self.par_average_target
-
+        self.par_average = float(self.total_voters) / self.par_count_limit
         self.parmax_target = self.par_average + self.delta * self.par_average
         self.parmin_target = self.par_average - self.delta * self.par_average
 
         if self.par_count:
-            self.parmax_actual = max(v['voters'] for v in self.topology_par.values())
+            self.parmax_actual = max(v[KEY_VOTERS] for v in self.topology_par.values())
             self.parmax_actual_precentage = (self.parmax_actual - self.par_average) * 100 / self.par_average
-            self.parmin_actual = min(v['voters'] for v in self.topology_par.values())
+            self.parmin_actual = min(v[KEY_VOTERS] for v in self.topology_par.values())
             self.parmin_actual_precentage = (self.parmin_actual - self.par_average) * 100 / self.par_average
 
     def get_best_deviation(self):
@@ -409,9 +472,6 @@ class Balancer(object):
                 self.statemin_actual >= self.statemin_target and
                 self.statemax_actual <= self.statemax_target)
 
-    def get_features_total(self):
-        return tuple((self.par_count, self.state_count, self.topology_polling.keys().__len__()))
-
     def get_unused(self):
         pars = [str(p) for p in self.get_par_code_sequence()]
         states = [str(s) for s in self.get_state_code_sequence()]
@@ -423,62 +483,44 @@ class Balancer(object):
 
     # todo par_new_prefix unused
     def resequence(self):
-        ordered = sorted(self.topology_polling.items(),
-                         key=lambda x: (x[1][self.par_field], x[1][self.state_field], x[0]))
-        par_renumber = 0
-        state_renumber = 0
-        polling_renumber = 1
-        par_current = None
-        state_current = None
+        action_dict = {}
 
-        for o in ordered:
-            val_state = o[1][self.state_field]
-            if val_state:
-                if state_current != val_state:
-                    state_renumber += 1
-                    polling_renumber = 1  # restart polling area renumbering
-                state_current = val_state
+        # build state to polling district mapping
+        state_dms_map = {}
+        for k1, v1 in self.topology_polling.items():
+            state_key = v1[self.state_field]
 
-            val_par = o[1][self.par_field]
-            if val_par:
-                if par_current != val_par:
-                    par_renumber += 1
-                par_current = val_par
+            if state_key in state_dms_map:
+                state_dms_map[state_key].append((k1, v1[KEY_GEOMETRY]))
+            else:
+                state_dms_map[state_key] = [(k1, v1[KEY_GEOMETRY])]
 
-            if val_par and val_state:
-                self.update_topology(
-                    {o[0]: {self.state_field: self.state_prefix_format % state_renumber,
-                            self.polling_field: self.polling_prefix_format % polling_renumber,
-                            self.par_field: self.par_prefix_format % par_renumber}})
+        # start with par
+        par_ordered = sorted(self.topology_par.items(), key=lambda x: x[1][KEY_GEOMETRY].centroid().asPoint().x())
 
-                polling_renumber += 1
+        # then state
+        par_counter = 0
+        state_counter = 0
+        for par in par_ordered:
+            par_counter += 1
+            states_keys = self.map_par_state[par[0]][KEY_STATES].keys()
+            states = [(sk, self.topology_state[sk]) for sk in states_keys]
+            states_ordered = sorted(states, key=lambda x: x[1][KEY_GEOMETRY].centroid().asPoint().x())
 
+            # then polling district
+            for state_entry in states_ordered:
+                state_counter += 1
+                dms = state_dms_map[state_entry[0]]
+                dms_ordered = sorted(dms, key=lambda x: x[1].centroid().asPoint().x())
 
-class NodePOLL(object):
-    def __init__(self, pollid, neighbours, voters, state):
-        self.id = pollid
-        self.adjacent_states = neighbours
-        self.voters = voters
-        self.state_prev = None
-        self.state_current = state
+                dm_counter = 0
+                for dm in dms_ordered:
+                    dm_counter += 1
 
+                    assert dm[0] not in action_dict
 
-class NodeSTATE(object):
-    def __init__(self, stateid, neighbours, states, parid):
-        self.id = stateid
-        self.adjacent_states = neighbours
-        self.states = states
-        self.par_prev = None
-        self.par_current = parid
+                    action_dict.update({dm[0]: {self.state_field: self.state_prefix_format % state_counter,
+                                                self.polling_field: self.polling_prefix_format % dm_counter,
+                                                self.par_field: self.par_prefix_format % par_counter}})
 
-        # get all adjacent POLLs by excluding POLLs in our own STATE
-        self.adjacent_states = dict(
-            [(poll, [adj for adj in poll.nodeEdge if adj not in self.states]) for poll in self.states])
-
-        # (poll, voters) : sorted[(poll_adj, voters)]
-        self.adjacent_voters = {}
-        for k, v in self.adjacent_states:
-            self.adjacent_voters.update(
-                {(k, k.voters): [(poll, poll.voters) for poll in v].sort(key=lambda x: x.voters)})
-
-        return sum(poll.voters for poll in self.states)
+        self.topology_update(action_dict)

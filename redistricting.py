@@ -21,11 +21,13 @@ Electorate Rebalancing and Redistricting
  ***************************************************************************/
 """
 # This will get replaced with a git SHA1 when you do a git archive
+from qgis.core import *
+from qgis.gui import *
 from PyQt4.QtCore import QSettings, QTranslator, qVersion, QCoreApplication, Qt
 from PyQt4.QtGui import QAction, QIcon, QMainWindow, QDockWidget
 
 __revision__ = '$Format:%H$'
-__version__ = '0.2'
+__version__ = '0.3.2'
 __pname__ = 'Redistricting'
 __modname__ = 'Redistricting'
 
@@ -167,6 +169,7 @@ class Redistricting:
         for w in self.iface.mainWindow().findChildren(QDockWidget):
             if w.windowTitle().find(__pname__) != -1:
                 self.iface.mainWindow().removeDockWidget(w)
+                del w
 
     def run(self):
         self.iface.mainWindow().setDockOptions(QMainWindow.AllowTabbedDocks)

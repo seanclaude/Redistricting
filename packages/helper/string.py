@@ -1,7 +1,3 @@
-import re
-
-__author__ = 'sean'
-
 
 def parse_int(string):
     if string is None:
@@ -25,4 +21,6 @@ def parse_float(string):
 
 
 def remove_tags(text):
+    import re
+
     return re.sub("<[^>]*>", '', text)

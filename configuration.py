@@ -29,6 +29,13 @@ __config_version__ = 1.1
 
 from PyQt4.QtCore import QSettings
 
+KEY_GEOMETRY = 'geom'
+KEY_AREA = 'area'
+KEY_CIRCULARITY = 'circ'
+KEY_COMPACTNESS = 'compact'
+KEY_VOTERS = 'voter'
+KEY_STATES = 'states'
+
 
 class Configuration(object):
     SRC_DIR = "Redistricting/src_directory"

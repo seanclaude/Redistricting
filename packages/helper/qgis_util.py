@@ -53,6 +53,9 @@ def save_qpj(filepath, epsg):
 
 
 def extend_qgis_interface(instance):
+    def clear(self):
+        self.messageBar().clearWidgets()
+
     def info(self, message, duration=2):
         self.messageBar().pushMessage("Info", message, QgsMessageBar.INFO, duration)
 
@@ -62,6 +65,7 @@ def extend_qgis_interface(instance):
     def error(self, message, duration=10):
         self.messageBar().pushMessage("Error", message, QgsMessageBar.CRITICAL, duration)
 
+    attach_method(clear, instance, QgisInterface)
     attach_method(info, instance, QgisInterface)
     attach_method(warning, instance, QgisInterface)
     attach_method(error, instance, QgisInterface)

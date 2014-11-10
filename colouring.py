@@ -20,6 +20,7 @@
 """
 import random
 import itertools
+import math
 import chroma
 from graph import Graph
 from helper.ui import generate_random_color
@@ -36,9 +37,9 @@ class Colouring(object):
         return self.__graphs[0]
 
     def __init__(self):
-        self.red_shade_brightness_generator = itertools.cycle(range(20, 100, 10))
-        self.blue_shade_brightness_generator = itertools.cycle(range(50, 100, 10))
-        self.grey_shade_brightness_generator = itertools.cycle(range(50, 100, 10))
+        self.red_shade_brightness_generator = itertools.cycle(range(30, 100, 15))
+        self.blue_shade_brightness_generator = itertools.cycle(range(30, 100, 15))
+        self.grey_shade_brightness_generator = itertools.cycle(range(85, 30, -15))
 
         self.gColouring = None
         self.colours_all = None
@@ -133,6 +134,7 @@ class Colouring(object):
                 colours.add(newcolour)
             else:
                 # use any free colour
-                newcolour = random.sample(avail, 1)[0]
+                # newcolour = random.sample(avail, 1)[0]
+                newcolour = avail.pop()
             colouring[k] = newcolour
         return colouring

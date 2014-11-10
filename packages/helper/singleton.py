@@ -1,6 +1,3 @@
-__author__ = 'sean'
-
-
 class Singleton(type):
     _instances = {}
 
