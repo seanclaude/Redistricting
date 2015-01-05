@@ -158,7 +158,7 @@ class Balancer(object):
         raise Exception("Not implemented")
 
     def statistics_calculate(self, transform):
-        # todo: does not handle multipart polygons properly
+        # todo: does it handle multipart polygons?
         # calculate state statistics
         # circularity => https://sites.google.com/site/mathagainstgerrymandering/advanced-attributes#TOC-Compactness
 
@@ -361,10 +361,12 @@ class Balancer(object):
 
     def recommendation_by_par(self, par_name):
 
+        recommend_msg = ""
+
         voters_par = self.get_par_voters(par_name)
 
         if not self.state_average or not voters_par:
-            return ""
+            return recommend_msg
 
         # get min/max for number of state seats in a par
         seats_state_min = math.floor(1.0 * self.state_count_limit / self.par_count_limit)
@@ -376,15 +378,19 @@ class Balancer(object):
         dun_size_with_min_seats = float(voters_par) / seats_state_min
         delta_min = math.fabs(self.state_average - dun_size_with_min_seats)
 
+        # recommended sesats (voters)
         if delta_max < delta_min:
-            return "{} STATE seats".format(int(seats_state_max))
-        elif delta_max > delta_min:
-            return "{} STATE seats".format(int(seats_state_min))
+            recommend_msg = "{} STATE seats.".format(int(seats_state_max))
         else:
-            return "{} STATE seats".format(int(seats_state_max))
+            recommend_msg = "{} STATE seats.".format(int(seats_state_min))
 
-            # recommended size (voters)
-            # recommended_par
+        # inflection point
+        point1 = self.state_average * seats_state_max
+        point2 = 1.0 * self.state_average * seats_state_min
+        midpoint = min(point1, point2) + (math.fabs(point2 - point1)/2)
+        recommend_msg += " Inflection point at {:.1f} voters.".format(midpoint)
+
+        return recommend_msg
 
     def calculate_limits(self, delta):
         self.delta = delta
@@ -517,10 +523,12 @@ class Balancer(object):
                 for dm in dms_ordered:
                     dm_counter += 1
 
-                    assert dm[0] not in action_dict
+                    if dm[0] in action_dict:
+                        return False
 
                     action_dict.update({dm[0]: {self.state_field: self.state_prefix_format % state_counter,
                                                 self.polling_field: self.polling_prefix_format % dm_counter,
                                                 self.par_field: self.par_prefix_format % par_counter}})
 
         self.topology_update(action_dict)
+        return True

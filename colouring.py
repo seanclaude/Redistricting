@@ -18,9 +18,8 @@
  *                                                                         *
  ***************************************************************************/
 """
-import random
 import itertools
-import math
+
 import chroma
 from graph import Graph
 from helper.ui import generate_random_color

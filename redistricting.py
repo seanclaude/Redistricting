@@ -27,7 +27,6 @@ from PyQt4.QtCore import QSettings, QTranslator, qVersion, QCoreApplication, Qt
 from PyQt4.QtGui import QAction, QIcon, QMainWindow, QDockWidget
 
 __revision__ = '$Format:%H$'
-__version__ = '0.3.2'
 __pname__ = 'Redistricting'
 __modname__ = 'Redistricting'
 
@@ -188,7 +187,6 @@ class Redistricting:
             self.iface.mainWindow().removeDockWidget(widget_exist)
 
         self.dock = RedistrictingDock(self.iface, self.iface.mainWindow())
-        self.dock.setWindowTitle('{} {}'.format(__pname__, __version__))
         self.iface.mainWindow().addDockWidget(Qt.RightDockWidgetArea, self.dock)
 
         if widget_other:

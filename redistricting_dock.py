@@ -20,8 +20,8 @@
  *                                                                         *
  ***************************************************************************/
 """
-
-from qgis.core import QGis, QgsRectangle, QgsCoordinateTransform, QgsVectorLayer, QgsPalLayerSettings, QgsSymbolV2, \
+from qgis.core import QGis, QgsCoordinateReferenceSystem, QgsRectangle, QgsCoordinateTransform, QgsVectorLayer, \
+    QgsPalLayerSettings, QgsSymbolV2, \
     QgsRendererCategoryV2, QgsPoint, \
     QgsCategorizedSymbolRendererV2, QgsFeatureRequest, QgsGeometry, QgsExpression, QgsMapLayerRegistry
 from qgis.gui import *
@@ -131,6 +131,7 @@ class RedistrictingDock(QDockWidget, FORM_CLASS):
         # http://qgis.org/api/classQgsMapCanvas.html
         self.cb_label.stateChanged.connect(self.label_handler)
         self.cb_feature_id.stateChanged.connect(self.label_handler)
+        self.cb_old_id.stateChanged.connect(self.label_handler)
 
         # monitor layer selection change
         QObject.connect(self.btClearSelected, SIGNAL("clicked()"), self.selection_clear)
@@ -153,6 +154,25 @@ class RedistrictingDock(QDockWidget, FORM_CLASS):
         self.clickTool.canvasDoubleClicked.disconnect(self.canvas_doubleclicked)
         self.clickTool.canvasSingleClicked.disconnect(self.canvas_clicked)
 
+        self.layer = None
+
+    @staticmethod
+    def extract_stats(dic, key):
+        itemlist = []
+        for v in dic.itervalues():
+            itemlist.append(v[key])
+
+        itemlist.sort()
+        length = len(itemlist)
+        min_value = min(itemlist)
+        max_value = max(itemlist)
+        median = -1
+        if not length % 2:
+            median = (itemlist[length / 2] + itemlist[length / 2 - 1]) / 2.0
+        else:
+            median = itemlist[length / 2]
+
+        return min_value, median, max_value
 
     def statistics_update(self):
         total_area = math.fsum([v[KEY_GEOMETRY].area() for v in self.balancer_old.topology_par.values()]) / 1000 / 1000
@@ -161,70 +181,60 @@ class RedistrictingDock(QDockWidget, FORM_CLASS):
         self.label_context_total.setText(str(self.balancer_old.total_voters))
         self.label_context_label.setText("{}".format(self.context_fieldname))
 
-        self.label_stats_eq.setText(self.tbDelta.text())
+        self.label_stats_eq.setText(parse_float("{}%".format(self.tbDelta.text()) * 100))
 
         # old stats
         self.balancer_old.statistics_calculate(self.coordinateTransform)
-        metrics_state_old = [(v[KEY_AREA], v[KEY_CIRCULARITY]) for v in self.balancer_old.state_statistics.itervalues()]
-        metrics_state_old_max = map(max, zip(*metrics_state_old))
-        metrics_state_old_min = map(min, zip(*metrics_state_old))
-        metrics_par_old = [(v[KEY_AREA], v[KEY_CIRCULARITY]) for v in self.balancer_old.par_statistics.itervalues()]
-        metrics_par_old_max = map(max, zip(*metrics_par_old))
-        metrics_par_old_min = map(min, zip(*metrics_par_old))
+
+        old_areas_state = self.extract_stats(self.balancer_old.state_statistics, KEY_AREA)
+        old_circularity_state = self.extract_stats(self.balancer_old.state_statistics, KEY_CIRCULARITY)
+        old_areas_par = self.extract_stats(self.balancer_old.par_statistics, KEY_AREA)
+        old_circularity_par = self.extract_stats(self.balancer_old.par_statistics, KEY_CIRCULARITY)
+
         old_unused = self.balancer_old.get_unused()
-        if metrics_par_old.__len__():
+        if old_areas_par.__len__():
             self.stats_old.setParValues(old_unused[0].__len__(),
                                         self.balancer_old.par_count_limit,
                                         self.balancer_old.parmin_actual_precentage,
                                         self.balancer_old.parmax_actual_precentage,
                                         self.balancer_old.par_average,
-                                        metrics_par_old_min[0],
-                                        metrics_par_old_max[0],
-                                        metrics_par_old_min[1],
-                                        metrics_par_old_max[1])
+                                        old_areas_par,
+                                        old_circularity_par)
 
-        if metrics_state_old.__len__():
+        if old_areas_state.__len__():
             self.stats_old.setStateValues(old_unused[1].__len__(),
                                           self.balancer_old.state_count_limit,
                                           self.balancer_old.statemin_actual_precentage,
                                           self.balancer_old.statemax_actual_precentage,
                                           self.balancer_old.state_average,
-                                          metrics_state_old_min[0],
-                                          metrics_state_old_max[0],
-                                          metrics_state_old_min[1],
-                                          metrics_state_old_max[1])
+                                          old_areas_state,
+                                          old_circularity_state)
 
         # new stats
         self.balancer_new.statistics_calculate(self.coordinateTransform)
-        metrics_state_new = [(v[KEY_AREA], v[KEY_CIRCULARITY]) for v in self.balancer_new.state_statistics.itervalues()]
-        metrics_state_new_max = map(max, zip(*metrics_state_new))
-        metrics_state_new_min = map(min, zip(*metrics_state_new))
-        metrics_par_new = [(v[KEY_AREA], v[KEY_CIRCULARITY]) for v in self.balancer_new.par_statistics.itervalues()]
-        metrics_par_new_max = map(max, zip(*metrics_par_new))
-        metrics_par_new_min = map(min, zip(*metrics_par_new))
+        new_areas_state = self.extract_stats(self.balancer_new.state_statistics, KEY_AREA)
+        new_circularity_state = self.extract_stats(self.balancer_new.state_statistics, KEY_CIRCULARITY)
+        new_areas_par = self.extract_stats(self.balancer_new.par_statistics, KEY_AREA)
+        new_circularity_par = self.extract_stats(self.balancer_new.par_statistics, KEY_CIRCULARITY)
         new_unused = self.balancer_new.get_unused()
 
-        if metrics_par_new.__len__():
+        if new_areas_par.__len__():
             self.stats_new.setParValues(new_unused[0].__len__(),
                                         self.balancer_new.par_count_limit,
                                         self.balancer_new.parmin_actual_precentage,
                                         self.balancer_new.parmax_actual_precentage,
                                         self.balancer_new.par_average,
-                                        metrics_par_new_min[0],
-                                        metrics_par_new_max[0],
-                                        metrics_par_new_min[1],
-                                        metrics_par_new_max[1])
+                                        new_areas_par,
+                                        new_circularity_par)
 
-        if metrics_state_new.__len__():
+        if new_areas_state.__len__():
             self.stats_new.setStateValues(new_unused[1].__len__(),
                                           self.balancer_new.state_count_limit,
                                           self.balancer_new.statemin_actual_precentage,
                                           self.balancer_new.statemax_actual_precentage,
                                           self.balancer_new.state_average,
-                                          metrics_state_new_min[0],
-                                          metrics_state_new_max[0],
-                                          metrics_state_new_min[1],
-                                          metrics_state_new_max[1])
+                                          new_areas_state,
+                                          new_circularity_state)
 
     def load_par_field(self, index):
         if not self.layer or index < 1:
@@ -384,7 +394,11 @@ class RedistrictingDock(QDockWidget, FORM_CLASS):
         balancer = self.get_balancer()
 
         if self.cb_feature_id.isChecked():
-            expr.append(balancer.get_feature_label())
+            if self.cb_old_id.isChecked():
+                # force display of old ID
+                expr.append(self.balancer_old.get_feature_label())
+            else:
+                expr.append(balancer.get_feature_label())
 
         if self.cb_label.isChecked():
             if self.selector_seat_type.currentIndex() == 1:
@@ -403,6 +417,7 @@ class RedistrictingDock(QDockWidget, FORM_CLASS):
         self.palyr.isExpression = True
         self.palyr.placement = QgsPalLayerSettings.OverPoint
         self.palyr.setDataDefinedProperty(QgsPalLayerSettings.Size, True, True, '8', '')
+        # rendering distance
 
         self.palyr.writeToLayer(self.layer)
 
@@ -457,7 +472,7 @@ class RedistrictingDock(QDockWidget, FORM_CLASS):
                 return
 
             QgsMapLayerRegistry.instance().addMapLayer(layer)
-            self.selector_layers.addItem(layer.name(), layer.id())
+            self.layer_add_to_selector(layer)
 
     def layer_preload(self, index):
         layer_id = self.selector_layers.itemData(index)
@@ -466,6 +481,9 @@ class RedistrictingDock(QDockWidget, FORM_CLASS):
             if layer.id() == layer_id:
                 self.layer = layer
                 self.layer_load()
+
+    def layer_add_to_selector(self, layer):
+        self.selector_layers.addItem(layer.name(), layer.id())
 
     def layer_changed(self):
         layer_found = False
@@ -478,9 +496,9 @@ class RedistrictingDock(QDockWidget, FORM_CLASS):
                 layer_found = True
 
             if self.selector_layers.findData(layer.id()) == -1 and \
-                            layer.type() == layer.VectorLayer and \
-                            layer.geometryType() == 2:
-                self.selector_layers.addItem(layer.name(), layer.id())
+               layer.type() == layer.VectorLayer and \
+               layer.geometryType() == 2:
+                self.layer_add_to_selector(layer)
 
         if not layer_found:
             # handle just started
@@ -636,7 +654,7 @@ class RedistrictingDock(QDockWidget, FORM_CLASS):
         self.iface.mapCanvas().clearCache()
         """
         if zoom_to_layer:
-            extent = self.iface.mapCanvas().mapRenderer().layerToMapCoordinates(self.layer, self.layer.extent())
+            extent = self.iface.mapCanvas().mapSettings().layerToMapCoordinates(self.layer, self.layer.extent())
             self.iface.mapCanvas().setExtent(extent)
             self.iface.mapCanvas().zoomToNextExtent()
         """
@@ -657,7 +675,11 @@ class RedistrictingDock(QDockWidget, FORM_CLASS):
             return
 
         self.layer.startEditing()
-        self.balancer_new.resequence()
+        if not self.balancer_new.resequence():
+            self.iface.error("Renumber failed! There are geometry errors. Please run geometry and topology checker.")
+            self.layer.rollBack()
+            self.layer.endEditCommand()
+            return
 
         par_used = [v[self.par_new_fieldname] for v in self.balancer_new.topology_polling.values()]
         state_used = [v[self.state_new_fieldname] for v in self.balancer_new.topology_polling.values()]
@@ -707,7 +729,7 @@ class RedistrictingDock(QDockWidget, FORM_CLASS):
         # scale-dependent buffer of 2 pixels-worth of map units
         buff = point.buffer((self.iface.mapCanvas().mapUnitsPerPixel() * 2), 0)
         rect_pseudo = buff.boundingBox()
-        rect = self.iface.mapCanvas().mapRenderer().mapToLayerCoordinates(self.layer, rect_pseudo)
+        rect = self.iface.mapCanvas().mapSettings().mapToLayerCoordinates(self.layer, rect_pseudo)
 
         return rect
 
@@ -783,6 +805,10 @@ class RedistrictingDock(QDockWidget, FORM_CLASS):
         # don't allow write to old layer
         if balancer.readonly:
             self.iface.warning("Old map is read only. Please switch to the new map for rebalancing.")
+            return
+
+        if len(self.layer.selectedFeatures()) == 0:
+            self.iface.warning("Nothing selected. Click on a feature to select it.")
             return
 
         current_state = balancer.state_prefix_format % self.selector_state.itemData(
@@ -862,29 +888,34 @@ class RedistrictingDock(QDockWidget, FORM_CLASS):
 
         delta = self.get_delta()
         if (self.selector_context.currentIndex() <= 0 or
-                    self.selector_polling_old.currentIndex() <= 0 or
-                    self.selector_state_old.currentIndex() <= 0 or
-                    self.selector_par_old.currentIndex() <= 0 or
-                    self.selector_state_new.currentIndex() <= 0 or
-                    self.selector_par_new.currentIndex() <= 0 or
-                    self.selector_polling_new.currentIndex() <= 0 or
-                    self.selector_target_state.currentIndex() <= 0 or
+            self.selector_polling_old.currentIndex() <= 0 or
+            self.selector_state_old.currentIndex() <= 0 or
+            self.selector_par_old.currentIndex() <= 0 or
+            self.selector_state_new.currentIndex() <= 0 or
+            self.selector_par_new.currentIndex() <= 0 or
+            self.selector_polling_new.currentIndex() <= 0 or
+            self.selector_target_state.currentIndex() <= 0 or
                 not delta or
                 not self.tb_new_par_count.text() or
                 not self.tb_new_state_count.text()):
             self.iface.error("Some fields are unspecified")
             return
 
-        provider = self.layer.dataProvider()
+        layer_crs = self.layer.dataProvider().crs()
+        if layer_crs.projectionAcronym() != 'merc' or \
+                        self.iface.mapCanvas().mapSettings().destinationCrs().projectionAcronym() != 'merc':
+            self.iface.warning(
+                "The current working layer is not using a mercator projection like EPSG:3857. Area calculations will not work.")
 
-        self.coordinateTransform = QgsCoordinateTransform(self.layer.dataProvider().crs(),
-                                                          self.iface.mapCanvas().mapRenderer().destinationCrs())
+        provider = self.layer.dataProvider()
+        self.coordinateTransform = QgsCoordinateTransform(layer_crs,
+                                                          self.iface.mapCanvas().mapSettings().destinationCrs())
 
         err_fields = []
 
         self.context_fieldname = self.selector_context.itemData(self.selector_context.currentIndex())
         if provider.fields().at(provider.fieldNameIndex(self.context_fieldname)).type() != QVariant.Int:
-            self.iface.error("The {} (voters field) must be an integer field.".format(self.context_fieldname))
+            self.iface.error("The {} (voters field) must be an integer number field.".format(self.context_fieldname))
             del provider
             return
 
@@ -996,21 +1027,21 @@ class QStatsWidget(QWidget, STATS_WIDGET):
         super(QWidget, self).__init__(parent)
         self.setupUi(self)
 
-    def setStateValues(self, unused, total, smin, smax, voters_mean, area_min, area_max, comp_min, comp_max):
+    def setStateValues(self, unused, total, smin, smax, voters_mean, area, compactness):
         self.lb_state_unused.setText(str(unused))
         self.lb_state_total.setText(str(total))
-        self.lb_state_voter_size.setText("{:.2f}% | {:.2f}%".format(smin, smax))
+        self.lb_state_voter_size.setText("{:.2f}% {:.2f}%".format(smin, smax))
         self.lb_state_mean_voters.setText("{:.0f}".format(voters_mean))
-        self.lb_state_size.setText("{:.2f} | {:.2f}".format(area_min, area_max))
-        self.lb_state_compact.setText("{:.2f} | {:.2f}".format(comp_min, comp_max))
+        self.lb_state_size.setText("{:.1f}/{:.1f}/{:.1f}".format(area[0], area[1], area[2]))
+        self.lb_state_compact.setText("{:.2f}/{:.2f}/{:.2f}".format(compactness[0], compactness[1], compactness[2]))
 
-    def setParValues(self, unused, total, pmin, pmax, voters_mean, area_min, area_max, comp_min, comp_max):
+    def setParValues(self, unused, total, pmin, pmax, voters_mean, area, compactness):
         self.lb_par_unused.setText(str(unused))
         self.lb_par_total.setText(str(total))
-        self.lb_par_voter_size.setText("{:.2f}% | {:.2f}%".format(pmin, pmax))
+        self.lb_par_voter_size.setText("{:.2f}% {:.2f}%".format(pmin, pmax))
         self.lb_par_mean_voters.setText("{:.0f}".format(voters_mean))
-        self.lb_par_size.setText("{:.2f} | {:.2f}".format(area_min, area_max))
-        self.lb_par_compact.setText("{:.2f} | {:.2f}".format(comp_min, comp_max))
+        self.lb_par_size.setText("{:.1f}/{:.1f}/{:.1f}".format(area[0], area[1], area[2]))
+        self.lb_par_compact.setText("{:.2f}/{:.2f}/{:.2f}".format(compactness[0], compactness[1], compactness[2]))
 
 
 class RedistrictingConstituenciesDialog(QDialog, CONSTITUENCIES_FORM_CLASS):
@@ -1031,6 +1062,10 @@ class RedistrictingConstituenciesDialog(QDialog, CONSTITUENCIES_FORM_CLASS):
     def topology_cell_clicked(self, row, column):
         """only the state ID is utilised"""
         import re
+
+        # if user has clicked on another layer, this will not work, set it back
+        if self.dock.layer.id() != self.dock.iface.mapCanvas().currentLayer().id():
+            self.dock.iface.mapCanvas().setCurrentLayer(self.dock.layer)
 
         # unselect first
         self.dock.selection_clear()
@@ -1214,6 +1249,7 @@ class DelimitationMapTool(QgsMapToolEmitPoint, object):
     canvasSingleClicked = QtCore.pyqtSignal(object, object)
 
     def __init__(self, canvas):
+        self.map_units = canvas.mapUnitsPerPixel()
         self.start_point = None
         self.end_point = None
         self.dragging = False
@@ -1237,9 +1273,9 @@ class DelimitationMapTool(QgsMapToolEmitPoint, object):
         self.button_clicked = e.button()
 
     def canvasReleaseEvent(self, e):
-        point = self.toMapCoordinates(e.pos())
-        if self.start_point and point == self.start_point:
-            self.canvasSingleClicked.emit(point, e.button())
+        self.end_point = self.toMapCoordinates(e.pos())
+        if not self.mouse_moved() and not self.double_click:
+            self.canvasSingleClicked.emit(self.end_point, e.button())
         else:
             if self.dragging:
                 self.canvas().panActionEnd(e.pos())
@@ -1252,11 +1288,17 @@ class DelimitationMapTool(QgsMapToolEmitPoint, object):
 
         self.reset()
 
+    def mouse_moved(self):
+        if self.start_point and \
+                (math.fabs(self.end_point.x() - self.start_point.x()) > self.map_units and
+                         math.fabs(self.end_point.y() - self.start_point.y()) > self.map_units):
+            return True
+
+        return False
+
     def canvasMoveEvent(self, e):
         self.end_point = self.toMapCoordinates(e.pos())
-        if self.start_point and \
-                (self.end_point.x() - self.start_point.x() != 0 and
-                 self.end_point.y() - self.start_point.y() != 0):
+        if self.mouse_moved():
             if self.button_clicked == Qt.RightButton:
                 self.canvas().panAction(e)
                 self.dragging = True
@@ -1267,7 +1309,7 @@ class DelimitationMapTool(QgsMapToolEmitPoint, object):
     def rectangle(self):
         if self.start_point is None or self.end_point is None:
             return None
-        elif self.start_point.x() == self.end_point.x() or self.start_point.y() == self.end_point.y():
+        elif not self.mouse_moved():
             return None
 
         return QgsRectangle(self.start_point, self.end_point)
