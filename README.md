@@ -4,7 +4,7 @@ democracy (or for those who are fighting to achieve democracy) to come up with t
 The plugin was created for [Tindak Malaysia](http://www.tindakmalaysia.org "Tindak Malaysia") in preparation for the Malaysian 2015 Delimitation exercise.
 
 ## Dependencies
-The plugin requires at least QGIS **2.4 or above**. There are no dependencies.
+The plugin requires at least [QGIS](http://www.qgis.org "QGIS") **2.4 or above**. There are no dependencies. Just install the plugin from within QGIS.
 
 
 ## Issues/Problems/Bugs
