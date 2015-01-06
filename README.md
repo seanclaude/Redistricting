@@ -116,7 +116,7 @@ Plugin Operation
 ================
 The following mouse actions are possible when the plugin is started
 
- -  Left-click - Select/Unselect a feature
+ - Left-click - Select/Unselect a feature
  
  - Right-click - Get details of parliamentary/state constituency the polling district is currently in
  
@@ -137,7 +137,7 @@ Feature labels
 --------------
 Each feature has a label, which can be turned on and off. For example,
 
--  **1/1/03** corresponds to the values **<parliamentary ID>/<state ID>/<polling district ID>**
+-  **1/1/03** corresponds to the values **parliamentary ID/state ID/polling district ID**
 
 -  **10.78** is the relative size of the polling districts in percentage. No. of voters/average constituency voters. Constituency here may mean state or parliamentary.
 
@@ -163,7 +163,7 @@ moving polling districts among the state constituencies within a parliamentary.
 
 **TIP:**
 
-1. Try using a smaller EQ to help identify oversized and undersized    constituencies, eg. Try using 5% even though your goal is 10%. The plugin will help highlight outliers quickly.
+1. Try using a smaller EQ to help identify oversized and undersized constituencies, eg. Try using 5% even though your goal is 10%. The plugin will help highlight outliers quickly.
 
 2. If you’re blocked by very large polling districts, try to see if you can swap large polling districts so that the nett change is small.
 
