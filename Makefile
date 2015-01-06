@@ -44,7 +44,7 @@ EXTRAS = icon.png metadata.txt
 
 COMPILED_RESOURCE_FILES = resources_rc.py
 
-COMPILED_UI_FILES = ui_delimitationtoolbox_dock.py \
+COMPILED_UI_FILES = ui_redistricting_dock.py \
                     ui_configuration.py \
                     ui_redistricting_constituencies.ui \
                     ui_widget_statistics.ui

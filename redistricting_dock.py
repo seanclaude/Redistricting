@@ -40,7 +40,7 @@ from configuration import KEY_AREA, KEY_CIRCULARITY, KEY_COMPACTNESS, KEY_VOTERS
 from layer_type import LayerType
 from redistricting import tr
 
-FORM_CLASS, _ = uic.loadUiType(os.path.join(os.path.dirname(__file__), 'ui_delimitationtoolbox_dock.ui'))
+FORM_CLASS, _ = uic.loadUiType(os.path.join(os.path.dirname(__file__), 'ui_redistricting_dock.ui'))
 CONFIG_FORM_CLASS, _ = uic.loadUiType(os.path.join(os.path.dirname(__file__), 'ui_configuration.ui'))
 CONSTITUENCIES_FORM_CLASS, _ = uic.loadUiType(
     os.path.join(os.path.dirname(__file__), 'ui_redistricting_constituencies.ui'))
@@ -452,7 +452,9 @@ class RedistrictingDock(QDockWidget, FORM_CLASS):
                 widget.setText(saved_state[widget.objectName()])
 
     def layer_select(self):
-        startdir = Configuration().read_qt(Configuration.SRC_DIR)
+        # startdir = Configuration().read_qt(Configuration.SRC_DIR)
+        startdir = os.path.join(os.path.split(__file__)[0], "data")
+
         filepath = QFileDialog.getOpenFileName(parent=self,
                                                caption='Select shapefile',
                                                filter="*.shp",

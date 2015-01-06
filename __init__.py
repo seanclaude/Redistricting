@@ -22,6 +22,7 @@
 import os
 import sys
 
+
 def classFactory(iface):  # pylint: disable=invalid-name
     """Load Redistricting class from file Redistricting.
 
