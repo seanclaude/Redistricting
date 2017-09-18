@@ -916,7 +916,7 @@ class RedistrictingDock(QDockWidget, FORM_CLASS):
         err_fields = []
 
         self.context_fieldname = self.selector_context.itemData(self.selector_context.currentIndex())
-        if provider.fields().at(provider.fieldNameIndex(self.context_fieldname)).type() != QVariant.Int:
+        if not provider.fields().at(provider.fieldNameIndex(self.context_fieldname)).isNumeric():
             self.iface.error("The {} (voters field) must be an integer number field.".format(self.context_fieldname))
             del provider
             return

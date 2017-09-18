@@ -21,7 +21,7 @@
 import codecs
 import os
 import cStringIO
-import configparser
+import configparser2
 from helper.singleton import Singleton
 
 defaultConfigFile = "default.ini"
@@ -49,7 +49,7 @@ class Configuration(object):
     qsettings = QSettings()
 
     def __init__(self):
-        self.__parser = configparser.ConfigParser(interpolation=configparser.ExtendedInterpolation())
+        self.__parser = configparser2.configparser2(interpolation=configparser2.ExtendedInterpolation())
         self.__basepath = os.path.split(__file__)[0]
 
     def _load_from_file(self):
@@ -74,7 +74,7 @@ class Configuration(object):
             # nothing to do here
             return
 
-        temp_parser = configparser.ConfigParser(interpolation=configparser.ExtendedInterpolation())
+        temp_parser = configparser2.configparser2(interpolation=configparser2.ExtendedInterpolation())
         temp_parser.read_string(self._load_from_file())
 
         # remove old non-existant sections
