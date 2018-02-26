@@ -1,6 +1,5 @@
-<aside class="notice">
-**The plugin is currently being migrated over to QGIS3**. There will be some UI enhancements. This is partly due to the breakages from QGIS3. Also, attempting to make the plugin more generic and applicable in other countries. 
-</aside>
+>**The plugin is currently being migrated over to QGIS3**. There will be some UI enhancements. This is partly due to the breakages from QGIS3. Also, attempting to make the plugin more generic and applicable in other countries. 
+
 
 # Redistricting for QGIS
 A QGIS plugin to assist in the the electoral delineation process. It provides a GUI interface to enable people in a 
