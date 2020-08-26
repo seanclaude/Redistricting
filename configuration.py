@@ -23,11 +23,10 @@ import os
 import cStringIO
 import configparser2
 from helper.singleton import Singleton
+from PyQt4.QtCore import QSettings
 
 defaultConfigFile = "default.ini"
 __config_version__ = 1.1
-
-from PyQt4.QtCore import QSettings
 
 KEY_GEOMETRY = 'geom'
 KEY_AREA = 'area'

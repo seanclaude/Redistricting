@@ -20,9 +20,6 @@ Electorate Rebalancing and Redistricting
  *                                                                         *
  ***************************************************************************/
 """
-# This will get replaced with a git SHA1 when you do a git archive
-from qgis.core import *
-from qgis.gui import *
 from PyQt4.QtCore import QSettings, QTranslator, qVersion, QCoreApplication, Qt
 from PyQt4.QtGui import QAction, QIcon, QMainWindow, QDockWidget
 

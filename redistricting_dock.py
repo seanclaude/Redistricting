@@ -20,20 +20,20 @@
  *                                                                         *
  ***************************************************************************/
 """
-from qgis.core import QGis, QgsCoordinateReferenceSystem, QgsRectangle, QgsCoordinateTransform, QgsVectorLayer, \
-    QgsPalLayerSettings, QgsSymbolV2, \
-    QgsRendererCategoryV2, QgsPoint, \
+from qgis.core import QGis, QgsRectangle, QgsCoordinateTransform, QgsVectorLayer, \
+    QgsPalLayerSettings, QgsSymbolV2, QgsRendererCategoryV2, QgsPoint, \
     QgsCategorizedSymbolRendererV2, QgsFeatureRequest, QgsGeometry, QgsExpression, QgsMapLayerRegistry
-from qgis.gui import *
+from qgis.gui import QgsMapToolEmitPoint, QgsRubberBand
 from PyQt4 import uic, QtGui, QtCore
 from PyQt4.QtCore import Qt, QObject, SIGNAL, QVariant
 from PyQt4.QtGui import QComboBox, QDockWidget, QColor, QFileDialog, QMessageBox, QDialog, QLineEdit, \
     QWidget
 import json
+import os
 import math
+import codecs
 from balancer import Balancer
-from configuration import *
-import configuration
+import configuration as config
 from helper.qgis_util import extend_qgis_interface
 from helper.string import parse_float
 from configuration import KEY_AREA, KEY_CIRCULARITY, KEY_COMPACTNESS, KEY_VOTERS
@@ -63,7 +63,7 @@ class RedistrictingDock(QDockWidget, FORM_CLASS):
         self.setupUi(self)
 
         # load configuration
-        Configuration().load()
+        config.Configuration().load()
 
         # coordinate transform
         self.coordinateTransform = None
@@ -175,7 +175,7 @@ class RedistrictingDock(QDockWidget, FORM_CLASS):
         return min_value, median, max_value
 
     def statistics_update(self):
-        total_area = math.fsum([v[KEY_GEOMETRY].area() for v in self.balancer_old.topology_par.values()]) / 1000 / 1000
+        total_area = math.fsum([v[config.KEY_GEOMETRY].area() for v in self.balancer_old.topology_par.values()]) / 1000 / 1000
 
         self.label_total_area.setText("{:.0f} sqr kms".format(total_area))
         self.label_context_total.setText(str(self.balancer_old.total_voters))
@@ -433,13 +433,13 @@ class RedistrictingDock(QDockWidget, FORM_CLASS):
         for widget in self.findChildren(QLineEdit):
             saved_state.update({widget.objectName(): widget.text()})
 
-        Configuration().store_qt(Configuration.UI_STATE, json.dumps(saved_state))
+        config.Configuration().store_qt(config.Configuration.UI_STATE, json.dumps(saved_state))
 
     def ui_state_load(self, excludes=None):
         if not excludes:
             excludes = []
         try:
-            saved_state = json.loads(Configuration().read_qt(Configuration.UI_STATE))
+            saved_state = json.loads(config.Configuration().read_qt(config.Configuration.UI_STATE))
         except:
             return
 
@@ -463,7 +463,7 @@ class RedistrictingDock(QDockWidget, FORM_CLASS):
             path, filename = os.path.split(filepath)
 
             # remember selected path
-            Configuration().store_qt(Configuration.SRC_DIR, path)
+            config.Configuration().store_qt(config.Configuration.SRC_DIR, path)
 
             name, ext = os.path.splitext(filename)
             # don't assign layer to self yet. only after balancer has started
@@ -755,7 +755,7 @@ class RedistrictingDock(QDockWidget, FORM_CLASS):
         feats = []
         balancer = self.get_balancer()
         for f in balancer.topology_polling.iteritems():
-            if f[1][KEY_GEOMETRY].intersects(rect):
+            if f[1][config.KEY_GEOMETRY].intersects(rect):
                 feats.append(f)
 
         if feats.__len__() == 0:
@@ -795,7 +795,7 @@ class RedistrictingDock(QDockWidget, FORM_CLASS):
         self.selector_target_state.clear()
         self.selector_target_state.addItem("Select state ...", "")
         map(lambda x: self.selector_target_state.addItem(x[0], x[1] if x.__len__() == 2 else ""),
-            [entry.split(':') for entry in Configuration().read("Settings", "state_prefixes")])
+            [entry.split(':') for entry in config.Configuration().read("Settings", "state_prefixes")])
 
     def selection_update(self):
         if not self.balancer_started:
@@ -1204,9 +1204,9 @@ class DelimitationToolboxConfigDialog(QDialog, CONFIG_FORM_CLASS):
 
     def show(self):
         # load settings
-        content = Configuration().read_qt(Configuration.SETTINGS)
+        content = config.Configuration().read_qt(config.Configuration.SETTINGS)
         if not content:
-            with open(os.path.join(self.__path, configuration.defaultConfigFile), 'r') as f:
+            with open(os.path.join(self.__path, config.defaultConfigFile), 'r') as f:
                 content = f.readall()
         self.txt_settings.setText(content)
 
@@ -1216,10 +1216,10 @@ class DelimitationToolboxConfigDialog(QDialog, CONFIG_FORM_CLASS):
     def save_config(self):
 
         # todo: check settings for syntax errors
-        Configuration().store_qt(Configuration.SETTINGS, self.txt_settings.toPlainText())
+        config.Configuration().store_qt(config.Configuration().SETTINGS, self.txt_settings.toPlainText())
 
         # reload configuration
-        Configuration().load()
+        config.Configuration().load()
 
         self.saved.emit()
         self.close()
@@ -1235,13 +1235,16 @@ class DelimitationToolboxConfigDialog(QDialog, CONFIG_FORM_CLASS):
 
     def reset_config(self):
         content = ""
-        with codecs.open(filename=os.path.join(self.__path, defaultConfigFile), mode='r', encoding='utf-8') as f:
+        with codecs.open(filename=os.path.join(self.__path,
+                                               config.defaultConfigFile),
+                         mode='r',
+                         encoding='utf-8') as f:
             content = f.read()
 
-        Configuration().store_qt(Configuration.SETTINGS, content)
+        config.Configuration().store_qt(config.Configuration.SETTINGS, content)
 
         # reload configuration
-        Configuration().load()
+        config.Configuration().load()
         self.dock.populate_state_selector()
         self.close()
 
@@ -1293,7 +1296,7 @@ class DelimitationMapTool(QgsMapToolEmitPoint, object):
     def mouse_moved(self):
         if self.start_point and \
                 (math.fabs(self.end_point.x() - self.start_point.x()) > self.map_units and
-                         math.fabs(self.end_point.y() - self.start_point.y()) > self.map_units):
+                 math.fabs(self.end_point.y() - self.start_point.y()) > self.map_units):
             return True
 
         return False
