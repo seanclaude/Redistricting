@@ -1,6 +1,3 @@
->**The plugin is currently being migrated over to QGIS3**. There will be some UI enhancements. This is partly due to the breakages from QGIS3. Also, attempting to make the plugin more generic and applicable in other countries. 
-
-
 # Redistricting for QGIS
 A QGIS plugin to assist in the the electoral delineation process. It provides a GUI interface to enable people in a 
 democracy (or for those who are fighting to achieve democracy) to come up with their own alternative maps. 
@@ -9,6 +6,10 @@ The plugin was created for Tindak Malaysia in preparation for the Malaysian 2015
 ## Dependencies
 The plugin requires at least [QGIS](http://www.qgis.org "QGIS") **2.4 or above**. There are no dependencies. Just install the plugin from within QGIS.
 
+#### Resource file
+To generate the resource file, run the following command:
+
+    pyrcc5 -o resources_rc.py resources.qrc
 
 ## Issues/Problems/Bugs
 If you find a problem, please submit an issue report. Either include the stackdump or explain how the problem can be reproduced to help with the troubleshooting.

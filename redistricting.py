@@ -20,28 +20,26 @@ Electorate Rebalancing and Redistricting
  *                                                                         *
  ***************************************************************************/
 """
-from PyQt4.QtCore import QSettings, QTranslator, qVersion, QCoreApplication, Qt
-from PyQt4.QtGui import QAction, QIcon, QMainWindow, QDockWidget
+
+from qgis.PyQt.QtCore import QSettings, QTranslator, qVersion, QCoreApplication, Qt
+from qgis.PyQt.QtWidgets import QAction, QMainWindow, QDockWidget
+from qgis.PyQt.QtGui import QIcon
+
 
 __revision__ = '$Format:%H$'
 __pname__ = 'Redistricting'
 __modname__ = 'Redistricting'
 
 # Import the code for the dialog
-import resources_rc
+from .resources import *
 
 
-def tr(message):
-    """Get the translation for a string using Qt translation API."""
-
-    # noinspection PyTypeChecker,PyArgumentList,PyCallByClass
-    return QCoreApplication.translate(__modname__, message)
-
-from redistricting_dock import RedistrictingDock
+from .redistricting_dock import RedistrictingDock
 import os.path
 
 
-class Redistricting:
+class Redistricting(object):
+    """QGIS Plugin Implementation."""
     def __init__(self, iface):
         """Constructor.
 
@@ -50,45 +48,65 @@ class Redistricting:
             application at run time.
         :type iface: QgsInterface
         """
-
         # Save reference to the QGIS interface
         self.iface = iface
         # initialize plugin directory
         self.plugin_dir = os.path.dirname(__file__)
+
         # initialize locale
         locale = QSettings().value('locale/userLocale')[0:2]
         locale_path = os.path.join(
             self.plugin_dir,
             'i18n',
-            '{}_{}.qm'.format(__modname__, locale))
+            'redistricting_{}.qm'.format(locale))
 
         if os.path.exists(locale_path):
             self.translator = QTranslator()
             self.translator.load(locale_path)
-
-            if qVersion() > '4.3.3':
-                QCoreApplication.installTranslator(self.translator)
+            QCoreApplication.installTranslator(self.translator)
 
         # Declare instance attributes
         self.actions = []
-        self.dock = None
+        self.menu = self.tr(__pname__)
+        # TODO: We are going to let the user set this up in a future iteration
+        self.toolbar = self.iface.addToolBar(__pname__)
+        self.toolbar.setObjectName(__pname__)
+
+        #print "** INITIALIZING redistricting"
+
+        self.pluginIsActive = False
+        self.dockwidget = None
+
+    # noinspection PyMethodMayBeStatic
+    def tr(self, message):
+        """Get the translation for a string using Qt translation API.
+
+        We implement this ourselves since we do not inherit QObject.
+
+        :param message: String for translation.
+        :type message: str, QString
+
+        :returns: Translated version of message.
+        :rtype: QString
+        """
+        # noinspection PyTypeChecker,PyArgumentList,PyCallByClass
+        return QCoreApplication.translate('redistricting', message)
 
     def add_action(
-            self,
-            icon_path,
-            text,
-            callback,
-            enabled_flag=True,
-            add_to_menu=True,
-            add_to_toolbar=True,
-            status_tip=None,
-            whats_this=None,
-            parent=None):
-
-        """Add a toolbar icon to the InaSAFE toolbar.
+        self,
+        icon_path,
+        text,
+        callback,
+        enabled_flag=True,
+        add_to_menu=True,
+        add_to_toolbar=True,
+        status_tip=None,
+        whats_this=None,
+        parent=None):
+        """Add a toolbar icon to the toolbar.
 
         :param icon_path: Path to the icon for this action. Can be a resource
-            __path (e.g. ':/plugins/foo/bar.png') or a normal file system __path.
+            path (e.g. ':/plugins/foo/bar.png') or a normal file system path.
         :type icon_path: str
 
         :param text: Text that should be shown in menu items for this action.
@@ -136,10 +154,12 @@ class Redistricting:
             action.setWhatsThis(whats_this)
 
         if add_to_toolbar:
-            self.iface.addToolBarIcon(action)
+            self.toolbar.addAction(action)
 
         if add_to_menu:
-            self.iface.addPluginToMenu(__pname__, action)
+            self.iface.addPluginToMenu(
+                self.menu,
+                action)
 
         self.actions.append(action)
 
@@ -148,52 +168,65 @@ class Redistricting:
     def initGui(self):
         """Create the menu entries and toolbar icons inside the QGIS GUI."""
 
-        icon_path = ':/plugins/{}/icon.png'.format(__modname__)
+        icon_path = ':/plugins/redistricting/icon.png'
         self.add_action(
             icon_path,
-            text=str(tr(__pname__)),
+            text=self.tr(__pname__),
             callback=self.run,
             parent=self.iface.mainWindow())
 
+    #--------------------------------------------------------------------------
+
+    def onClosePlugin(self):
+        """Cleanup necessary items here when plugin dockwidget is closed"""
+
+        #print "** CLOSING redistricting"
+
+        # disconnects
+        self.dockwidget.closingPlugin.disconnect(self.onClosePlugin)
+
+        # remove this statement if dockwidget is to remain
+        # for reuse if plugin is reopened
+        # Commented next statement since it causes QGIS crashe
+        # when closing the docked window:
+        # self.dockwidget = None
+
+        self.pluginIsActive = False
+
     def unload(self):
+        """Removes the plugin menu item and icon from QGIS GUI."""
+
+        #print "** UNLOAD redistricting"
+
         for action in self.actions:
             self.iface.removePluginMenu(
-                tr(__pname__),
+                __pname__,
                 action)
             self.iface.removeToolBarIcon(action)
 
-        for w in self.iface.mainWindow().findChildren(QDockWidget):
-            if w.windowTitle().find(__pname__) != -1:
-                self.iface.mainWindow().removeDockWidget(w)
-                del w
+        del self.toolbar
 
     def run(self):
-        self.iface.mainWindow().setDockOptions(QMainWindow.AllowTabbedDocks)
-        widget_other = None
-        widget_exist = None
-        for w in self.iface.mainWindow().findChildren(QDockWidget):
-            if w.windowTitle().find(__pname__) != -1:
-                widget_exist = w
-            elif self.iface.mainWindow().dockWidgetArea(w) == Qt.RightDockWidgetArea:
-                # we want the first one only
-                if not widget_other:
-                    widget_other = w
+        """Run method that loads and starts the plugin"""
 
-        # Create the dialog (after translation) and keep reference
-        if widget_exist:
-            self.iface.mainWindow().removeDockWidget(widget_exist)
+        if not self.pluginIsActive:
+            self.pluginIsActive = True
 
-        self.dock = RedistrictingDock(self.iface, self.iface.mainWindow())
-        self.iface.mainWindow().addDockWidget(Qt.RightDockWidgetArea, self.dock)
+            # print "** STARTING redistricting"
 
-        if widget_other:
-            self.iface.mainWindow().tabifyDockWidget(widget_other, self.dock)
+            # dockwidget may not exist if:
+            #    first run of plugin
+            #    removed on close (see self.onClosePlugin method)
+            if self.dockwidget == None:
+                # Create the dockwidget (after translation) and keep reference
+                self.dockwidget = RedistrictingDock(self.iface, self.iface.mainWindow())
 
-        for layer in self.iface.mapCanvas().layers():
-            if layer.type() == layer.VectorLayer and layer.geometryType() == 2:  # QGis.Polygon
-                self.dock.selector_layers.addItem(layer.name(), layer.id())
+            # connect to provide cleanup on closing of dockwidget
+            self.dockwidget.closingPlugin.connect(self.onClosePlugin)
 
-        self.dock.show()
-        self.dock.raise_()
-        if self.dock.selector_layers.count() != 0:
-            self.dock.layer_preload(0)
+            # show the dockwidget
+            # TODO: fix to allow choice of dock location
+            self.iface.addDockWidget(Qt.RightDockWidgetArea, self.dockwidget)
+            self.dockwidget.show()
+
+

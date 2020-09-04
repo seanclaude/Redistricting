@@ -20,11 +20,12 @@
 #################################################
 # Edit the following to match your sources lists
 #################################################
-UICPATH = $(OSGEO4W_ROOT)\apps\Python27\Lib\site-packages\PyQt4\uic\pyuic.py
-UIC = python $(UICPATH)
+
 
 #Add iso code for any locales you want to support here (space separated)
-LOCALES = af
+# default is no locales
+# LOCALES = af
+LOCALES =
 
 # translation
 SOURCES = \
@@ -39,15 +40,28 @@ PY_FILES = \
 	redistricting_dock.py \
 	__init__.py
 
+UI_FILES = ui_configuration.ui \
+	ui_redistricting_constituencies.ui \
+	ui_redistricting_dock.ui \
+	ui_widget_statistics.ui
+
 EXTRAS = icon.png metadata.txt
 
 
-COMPILED_RESOURCE_FILES = resources_rc.py
+COMPILED_RESOURCE_FILES = resources.py
 
-COMPILED_UI_FILES = ui_redistricting_dock.py \
-                    ui_configuration.py \
-                    ui_redistricting_constituencies.ui \
-                    ui_widget_statistics.ui
+PEP8EXCLUDE=pydev,resources.py,conf.py,third_party,ui
+
+# QGISDIR points to the location where your plugin should be installed.
+# This varies by platform, relative to your HOME directory:
+#	* Linux:
+#	  .local/share/QGIS/QGIS3/profiles/default/python/plugins/
+#	* Mac OS X:
+#	  Library/Application Support/QGIS/QGIS3/profiles/default/python/plugins
+#	* Windows:
+#	  AppData\Roaming\QGIS\QGIS3\profiles\default\python\plugins'
+
+QGISDIR=C:\Users\seanl\AppData/Roaming/QGIS/QGIS3/profiles/default/python/plugins
 
 #################################################
 # Normally you would not need to edit below here
@@ -57,20 +71,24 @@ HELP = help/build/html
 
 PLUGIN_UPLOAD = $(c)/plugin_upload.py
 
-QGISDIR=.qgis2
+RESOURCE_SRC=$(shell grep '^ *<file' resources.qrc | sed 's@</file>@@g;s/.*>//g' | tr '\n' ' ')
 
-default: compile
+.PHONY: default
+default:
+	@echo While you can use make to build and deploy your plugin, pb_tool
+	@echo is a much better solution.
+	@echo A Python script, pb_tool provides platform independent management of
+	@echo your plugins and runs anywhere.
+	@echo You can install pb_tool using: pip install pb_tool
+	@echo See https://g-sherman.github.io/plugin_build_tool/ for info. 
 
-compile: $(COMPILED_RESOURCE_FILES) $(COMPILED_UI_FILES)
+compile: $(COMPILED_RESOURCE_FILES)
 
-%_rc.py : %.qrc
-	pyrcc4 -o $*_rc.py  $<
-
-%.py : %.ui
-	$(UIC) -o $@ $<
+%.py : %.qrc $(RESOURCES_SRC)
+	pyrcc5 -o $*.py  $<
 
 %.qm : %.ts
-	lrelease $<
+	$(LRELEASE) $<
 
 test: compile transcompile
 	@echo
@@ -100,21 +118,23 @@ deploy: compile doc transcompile
 	# $HOME/$(QGISDIR)/python/plugins
 	mkdir -p $(HOME)/$(QGISDIR)/python/plugins/$(PLUGINNAME)
 	cp -vf $(PY_FILES) $(HOME)/$(QGISDIR)/python/plugins/$(PLUGINNAME)
-	cp -vf $(COMPILED_UI_FILES) $(HOME)/$(QGISDIR)/python/plugins/$(PLUGINNAME)
+	cp -vf $(UI_FILES) $(HOME)/$(QGISDIR)/python/plugins/$(PLUGINNAME)
 	cp -vf $(COMPILED_RESOURCE_FILES) $(HOME)/$(QGISDIR)/python/plugins/$(PLUGINNAME)
 	cp -vf $(EXTRAS) $(HOME)/$(QGISDIR)/python/plugins/$(PLUGINNAME)
 	cp -vfr i18n $(HOME)/$(QGISDIR)/python/plugins/$(PLUGINNAME)
 	cp -vfr $(HELP) $(HOME)/$(QGISDIR)/python/plugins/$(PLUGINNAME)/help
+	# Copy extra directories if any
+	(foreach EXTRA_DIR,(EXTRA_DIRS), cp -R (EXTRA_DIR) (HOME)/(QGISDIR)/python/plugins/(PLUGINNAME)/;)
 
 # The dclean target removes compiled python files from plugin directory
-# also deletes any .svn entry
+# also deletes any .git entry
 dclean:
 	@echo
 	@echo "-----------------------------------"
 	@echo "Removing any compiled python files."
 	@echo "-----------------------------------"
 	find $(HOME)/$(QGISDIR)/python/plugins/$(PLUGINNAME) -iname "*.pyc" -delete
-	find $(HOME)/$(QGISDIR)/python/plugins/$(PLUGINNAME) -iname ".svn" -prune -exec rm -Rf {} \;
+	find $(HOME)/$(QGISDIR)/python/plugins/$(PLUGINNAME) -iname ".git" -prune -exec rm -Rf {} \;
 
 
 derase:
@@ -169,7 +189,7 @@ transcompile:
 	@echo "Compiled translation files to .qm files."
 	@echo "----------------------------------------"
 	@chmod +x scripts/compile-strings.sh
-	@scripts/compile-strings.sh $(LOCALES)
+	@scripts/compile-strings.sh $(LRELEASE) $(LOCALES)
 
 transclean:
 	@echo
@@ -213,4 +233,7 @@ pep8:
 	@echo "-----------"
 	@echo "PEP8 issues"
 	@echo "-----------"
-	@pep8 --repeat --ignore=E203,E121,E122,E123,E124,E125,E126,E127,E128 --exclude pydev,resources_rc.py,conf.py . || true
+	@pep8 --repeat --ignore=E203,E121,E122,E123,E124,E125,E126,E127,E128 --exclude $(PEP8EXCLUDE) . || true
+	@echo "-----------"
+	@echo "Ignored in PEP8 check:"
+	@echo $(PEP8EXCLUDE)

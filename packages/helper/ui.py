@@ -1,25 +1,28 @@
+from builtins import range
+from builtins import object
 import colorsys
 import os
 import random
 import subprocess
 import sys
-from qgis.gui import QgsMessageBar
+import enum
+import types
+from qgis.core import Qgis
 from qgis.utils import iface
-from PyQt4.QtCore import Qt
-from PyQt4.QtGui import QBrush, QListWidget, QListWidgetItem, QLabel, QProgressBar
-from enum import Enum
+from qgis.PyQt.QtCore import Qt, QVariant
+from qgis.PyQt.QtGui import QBrush
+from qgis.PyQt.QtWidgets import QListWidget, QListWidgetItem, QLabel, QProgressBar
 from helper.string import remove_tags
-from helper.extensions import attach_method
-from PyQt4 import QtCore
-
-try:
-    _fromUtf8 = QtCore.QString.fromUtf8
-except AttributeError:
-    _fromUtf8 = lambda s: s
 
 
 def isnull(instance):
-    return instance is None or type(instance) is QtCore.QPyNullVariant
+    if type(instance) is QVariant:
+        return instance.isNull()
+
+    if instance is None:
+        return True
+
+    return False
 
 
 def generate_random_color(count):
@@ -47,22 +50,21 @@ def open_folder(path):
 
 
 def extend_qlabel_setbold(instance):
-
     if instance.textFormat() == Qt.RichText:
         raise Exception("Leave text format as Qt.PlainText")
 
     instance.setTextFormat(Qt.RichText)
 
-    def setBold(self, is_bold):
-        txt = remove_tags(self.text())
+    def setBold(is_bold):
+        txt = remove_tags(instance.text())
         if is_bold:
             txt = "<strong>{}</strong>".format(txt)
         else:
             txt = "<span>{}</span>".format(txt)
 
-        self.setText(txt)
+        instance.setText(txt)
 
-    attach_method(setBold, instance, QLabel)
+    instance.setBold = types.MethodType(setBold, instance)
 
 
 def extend_qt_list_widget(instance):
@@ -70,35 +72,35 @@ def extend_qt_list_widget(instance):
     brush_fail = QBrush(Qt.darkRed)
     brush_normal = QBrush(Qt.darkGray)
 
-    def msg_ok(self, message):
+    def msg_ok(message):
         item = QListWidgetItem(message)
         item.setForeground(brush_ok)
-        self.addItem(item)
+        instance.addItem(item)
 
-    def msg_fail(self, message):
+    def msg_fail(message):
         item = QListWidgetItem(message)
         item.setForeground(brush_fail)
-        self.addItem(item)
+        instance.addItem(item)
 
-    def msg_normal(self, message):
+    def msg_normal(message):
         item = QListWidgetItem(message)
         item.setForeground(brush_normal)
-        self.addItem(item)
+        instance.addItem(item)
 
-    attach_method(msg_normal, instance, QListWidget)
-    attach_method(msg_ok, instance, QListWidget)
-    attach_method(msg_fail, instance, QListWidget)
+    instance.msg_normal = types.MethodType(msg_normal, instance)
+    instance.msg_ok = types.MethodType(msg_ok, instance)
+    instance.msg_fail = types.MethodType(msg_fail, instance)
 
     return instance
 
 
-class MessageType(Enum):
+class MessageType(enum.Enum):
     Fail = -1
     Normal = 0
     OK = 1
 
 
-class QgisMessageBarProgress:
+class QgisMessageBarProgress(object):
 
     def __init__(self, text=""):
         self.progressMessageBar = \
@@ -108,12 +110,12 @@ class QgisMessageBarProgress:
         self.progress.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         self.progressMessageBar.layout().addWidget(self.progress)
         iface.messageBar().pushWidget(self.progressMessageBar,
-                                      iface.messageBar().INFO)
+                                      Qgis.Info)
 
     def error(self, msg):
         iface.messageBar().clearWidgets()
         iface.messageBar().pushMessage("Error", msg,
-                                       level=QgsMessageBar.CRITICAL,
+                                       level=Qgis.Critical,
                                        duration=8)
 
     def setPercentage(self, i):

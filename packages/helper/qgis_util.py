@@ -2,8 +2,9 @@ import glob
 import logging
 import os
 from osgeo import osr
+from qgis.core import Qgis
 from qgis.gui import QgisInterface, QgsMessageBar
-from extensions import attach_method
+import types
 
 
 def get_spatialreference(epsg):
@@ -53,22 +54,22 @@ def save_qpj(filepath, epsg):
 
 
 def extend_qgis_interface(instance):
-    def clear(self):
-        self.messageBar().clearWidgets()
+    def clear():
+        instance.messageBar().clearWidgets()
 
     def info(self, message, duration=2):
-        self.messageBar().pushMessage("Info", message, QgsMessageBar.INFO, duration)
+        self.messageBar().pushMessage("Info", message, Qgis.Info, duration)
 
     def warning(self, message, duration=8):
-        self.messageBar().pushMessage("Warning", message, QgsMessageBar.WARNING, duration)
+        self.messageBar().pushMessage("Warning", message, Qgis.Warning, duration)
 
     def error(self, message, duration=10):
-        self.messageBar().pushMessage("Error", message, QgsMessageBar.CRITICAL, duration)
+        self.messageBar().pushMessage("Error", message, Qgis.Critical, duration)
 
-    attach_method(clear, instance, QgisInterface)
-    attach_method(info, instance, QgisInterface)
-    attach_method(warning, instance, QgisInterface)
-    attach_method(error, instance, QgisInterface)
+    instance.clear = types.MethodType(clear, instance)
+    instance.info = types.MethodType(info, instance)
+    instance.warning = types.MethodType(warning, instance)
+    instance.error = types.MethodType(error, instance)
 
     return instance
 

@@ -18,15 +18,19 @@
  *                                                                         *
  ***************************************************************************/
 """
+from builtins import map
+from builtins import object
 import codecs
 import os
-import cStringIO
-import configparser2
+import io
 from helper.singleton import Singleton
-from PyQt4.QtCore import QSettings
+from qgis.PyQt.QtCore import QSettings
+from future.utils import with_metaclass
+import configparser
+import json
 
 defaultConfigFile = "default.ini"
-__config_version__ = 1.1
+__config_version__ = 1.2
 
 KEY_GEOMETRY = 'geom'
 KEY_AREA = 'area'
@@ -36,7 +40,7 @@ KEY_VOTERS = 'voter'
 KEY_STATES = 'states'
 
 
-class Configuration(object):
+class Configuration(with_metaclass(Singleton, object)):
     SRC_DIR = "Redistricting/src_directory"
     SETTINGS = "Redistricting/settings"
     UI_STATE = "Redistricting/ui"
@@ -44,11 +48,10 @@ class Configuration(object):
 
     __parser = None
     __basepath = None
-    __metaclass__ = Singleton
     qsettings = QSettings()
 
     def __init__(self):
-        self.__parser = configparser2.ConfigParser(interpolation=configparser2.ExtendedInterpolation())
+        self.__parser = configparser.ConfigParser(interpolation=configparser.ExtendedInterpolation())
         self.__basepath = os.path.split(__file__)[0]
 
     def _load_from_file(self):
@@ -60,7 +63,7 @@ class Configuration(object):
         if not txt:
             txt = self._load_from_file()
             self.store_qt(Configuration.SETTINGS, txt)
-            self.__parser.read_string(txt)
+            self.__parser.read_string( txt)
         else:
             # compare versions to see if we need to update version stored in QGIS
             self.__parser.read_string(txt)
@@ -73,12 +76,12 @@ class Configuration(object):
             # nothing to do here
             return
 
-        temp_parser = configparser2.ConfigParser(interpolation=configparser2.ExtendedInterpolation())
+        temp_parser = configparser.ConfigParser(interpolation=configparser.ExtendedInterpolation())
         temp_parser.read_string(self._load_from_file())
 
         # remove old non-existant sections
         remove_sections = set(self.__parser.sections()).difference(set(temp_parser.sections()))
-        map(lambda x: self.__parser.remove_section(x), remove_sections)
+        list(map(lambda x: self.__parser.remove_section(x), remove_sections))
 
         # remove old non-existant keys
         for section in self.__parser.sections():
@@ -95,7 +98,7 @@ class Configuration(object):
                     self.__parser.set(section, option, temp_parser.get(section, option))
 
         # save to qsettings
-        string_output = cStringIO.StringIO()
+        string_output = io.StringIO()
         self.__parser.write(string_output)
         txt = string_output.getvalue()
         string_output.close()
@@ -105,11 +108,8 @@ class Configuration(object):
         self.store_qt(Configuration.VERSION, __config_version__)
 
     def read(self, section, option):
-        result = self.__parser.get(section, option).encode('utf-8')
-        if (result.__len__() and result[0] == "[") and (result[-1] == "]"):
-            return [x.strip() for x in result[1:-1].split(',')]
-
-        return result
+        result = self.__parser.get(section, option)
+        return json.loads(result)
 
     def read_qt(self, key):
         return self.qsettings.value(key)

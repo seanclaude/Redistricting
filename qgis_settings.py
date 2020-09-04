@@ -1,4 +1,4 @@
-from PyQt4.QtCore import QSettings
+from qgis.PyQt.QtCore import QSettings
 
 SRC_DIR = "Redistricting/src_directory"
 CSV_FILE = "Redistricting/csv_file"

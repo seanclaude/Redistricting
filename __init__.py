@@ -23,15 +23,16 @@ import os
 import sys
 
 
+# noinspection PyPep8Naming
 def classFactory(iface):  # pylint: disable=invalid-name
     """Load Redistricting class from file Redistricting.
 
     :param iface: A QGIS interface instance.
     :type iface: QgsInterface
     """
-    delimitation_path = os.path.split(__file__)[0]
-    package_path = os.path.join(delimitation_path, "packages")
-    sys.path.append(package_path)
+    root_path = os.path.split(__file__)[0]
+    packages_path = os.path.join(root_path, "packages")
+    sys.path.append(packages_path)
 
     try:
         from helper import debug2
@@ -39,5 +40,5 @@ def classFactory(iface):  # pylint: disable=invalid-name
     except:
         pass
 
-    from redistricting import Redistricting
+    from .redistricting import Redistricting
     return Redistricting(iface)

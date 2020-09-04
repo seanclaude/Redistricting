@@ -18,8 +18,11 @@
  *                                                                         *
  ***************************************************************************/
 """
+from builtins import str
+from builtins import object
 
-class Graph:
+
+class Graph(object):
     def __init__(self, is_sorted=True):
         self.sorted = is_sorted
         self.nodeEdge = {}
@@ -30,14 +33,14 @@ class Graph:
         if self.sorted:
             ij.sort()
         (i, j) = ij
-        if self.nodeEdge.has_key(i):
+        if i in self.nodeEdge:
             self.nodeEdge[i].add(j)
         else:
-            self.nodeEdge[i] = set([j])
+            self.nodeEdge[i] = {j}
 
     def dump(self):
         out = []
-        for k in self.nodeEdge.keys():
+        for k in list(self.nodeEdge.keys()):
             out.append(str(k)+":")
             for v in self.nodeEdge[k]:
                 out.append(" --> "+str(v))
@@ -45,13 +48,13 @@ class Graph:
 
     def write_dot(self, name, filepath):
         dot = self.make_dot(name)
-        fp = file(filepath, "w")
+        fp = open(filepath, "w")
         fp.write(dot)
         fp.close()
 
     def make_dot(self, name):
         s = ['graph "%s" {' % name]
-        for k in self.nodeEdge.keys():
+        for k in list(self.nodeEdge.keys()):
             for v in self.nodeEdge[k]:
                 s.append('"%s" -- "%s" ;' % (str(k), str(v)))
         s.append("}")
@@ -59,10 +62,8 @@ class Graph:
 
     def makefull(self):
         g = Graph(is_sorted=False)
-        for k in self.nodeEdge.keys():
+        for k in list(self.nodeEdge.keys()):
             for v in self.nodeEdge[k]:
                 g.add_edge(v, k)
                 g.add_edge(k, v)
         return g
-            
-

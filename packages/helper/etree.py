@@ -21,6 +21,6 @@ def populate_element(element, d):
             # serialize the child dictionary
             populate_element(child, v)
         else:
-            child.text = unicode(v)
+            child.text = v
         element.append(child)
 

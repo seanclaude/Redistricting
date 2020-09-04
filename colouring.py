@@ -18,10 +18,13 @@
  *                                                                         *
  ***************************************************************************/
 """
+from builtins import next
+from builtins import range
+from builtins import object
 import itertools
 
 import chroma
-from graph import Graph
+from .graph import Graph
 from helper.ui import generate_random_color
 
 
@@ -36,9 +39,9 @@ class Colouring(object):
         return self.__graphs[0]
 
     def __init__(self):
-        self.red_shade_brightness_generator = itertools.cycle(range(30, 100, 15))
-        self.blue_shade_brightness_generator = itertools.cycle(range(30, 100, 15))
-        self.grey_shade_brightness_generator = itertools.cycle(range(85, 30, -15))
+        self.red_shade_brightness_generator = itertools.cycle(list(range(30, 100, 15)))
+        self.blue_shade_brightness_generator = itertools.cycle(list(range(30, 100, 15)))
+        self.grey_shade_brightness_generator = itertools.cycle(list(range(85, 30, -15)))
 
         self.gColouring = None
         self.colours_all = None
@@ -52,13 +55,13 @@ class Colouring(object):
         s = self.graph
         ig = self.id_graph
 
-        for k1, v1 in features.items():
+        for k1, v1 in list(features.items()):
             a1 = k1
             g1 = v1['geom']
 
             # add to graph anyway if node is not connected to anything
             found_connection = False
-            for k2, v2 in features.items():
+            for k2, v2 in list(features.items()):
                 if k2 == k1:
                     break
 
@@ -95,11 +98,6 @@ class Colouring(object):
                 grey = self.get_grey_shade()
             self.colours_grey.append(grey)
 
-        assert set(self.colours_all).__len__() == self.max_colours
-        assert set(self.colours_blue).__len__() == self.max_colours
-        assert set(self.colours_red).__len__() == self.max_colours
-        assert set(self.colours_grey).__len__() == self.max_colours
-
     def get_red_shade(self):
         red = chroma.Color('#ff0000')
         brightness = next(self.red_shade_brightness_generator)
@@ -121,7 +119,7 @@ class Colouring(object):
     def greedy(self):
         colouring = {}
         colours = set()
-        for k in self.graph.nodeEdge.keys():
+        for k in list(self.graph.nodeEdge.keys()):
             adjcolours = set()
             for v in self.graph.nodeEdge[k]:
                 if v in colouring:
