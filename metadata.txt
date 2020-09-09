@@ -4,11 +4,10 @@ qgisMinimumVersion=3.0
 
 description=Electorate Redistricting and Equalisation
 about=Redistricting and electoral equalisation tool. Features simultaneous equalisation of state and parliamentary electorates, metrics and a recommendation engine.
-version=0.4.1
+version=0.3.7
 author=Sean Lin
 email=seanlinmt@gmail.com
 tags=vector, districting, redistricting, democracy, delimitation
-homepage=https://github.com/seanclaude/Redistricting
 repository=https://github.com/seanclaude/Redistricting
 tracker=https://github.com/seanclaude/Redistricting/issues
 experimental=False
