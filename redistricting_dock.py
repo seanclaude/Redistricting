@@ -845,7 +845,7 @@ class RedistrictingDock(QtWidgets.QDockWidget, FORM_CLASS):
         if self.layer is None:
             return
 
-        self.layer.setSelectedFeatures([])
+        self.layer.removeSelection()
 
     def get_balancer(self):
         """0=old map, 1=new map"""
