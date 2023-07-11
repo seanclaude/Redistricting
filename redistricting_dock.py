@@ -36,7 +36,7 @@ import codecs
 from .balancer import Balancer
 from . import configuration as config
 from helper.qgis_util import extend_qgis_interface
-from helper.string import parse_float
+from helper.string_util import parse_float
 from .configuration import KEY_AREA, KEY_CIRCULARITY, KEY_COMPACTNESS, KEY_VOTERS
 from .layer_type import LayerType
 import statistics
@@ -184,8 +184,8 @@ class RedistrictingDock(QtWidgets.QDockWidget, FORM_CLASS):
         if old_areas_par.__len__():
             self.stats_old.setParValues(old_unused[0].__len__(),
                                         self.balancer_old.par_count_limit,
-                                        self.balancer_old.parmin_actual_precentage,
-                                        self.balancer_old.parmax_actual_precentage,
+                                        self.balancer_old.parmin_actual_percentage,
+                                        self.balancer_old.parmax_actual_percentage,
                                         self.balancer_old.par_average,
                                         old_areas_par,
                                         old_circularity_par)
@@ -193,8 +193,8 @@ class RedistrictingDock(QtWidgets.QDockWidget, FORM_CLASS):
         if old_areas_state.__len__():
             self.stats_old.setStateValues(old_unused[1].__len__(),
                                           self.balancer_old.state_count_limit,
-                                          self.balancer_old.statemin_actual_precentage,
-                                          self.balancer_old.statemax_actual_precentage,
+                                          self.balancer_old.statemin_actual_percentage,
+                                          self.balancer_old.statemax_actual_percentage,
                                           self.balancer_old.state_average,
                                           old_areas_state,
                                           old_circularity_state)
@@ -210,8 +210,8 @@ class RedistrictingDock(QtWidgets.QDockWidget, FORM_CLASS):
         if new_areas_par.__len__():
             self.stats_new.setParValues(new_unused[0].__len__(),
                                         self.balancer_new.par_count_limit,
-                                        self.balancer_new.parmin_actual_precentage,
-                                        self.balancer_new.parmax_actual_precentage,
+                                        self.balancer_new.parmin_actual_percentage,
+                                        self.balancer_new.parmax_actual_percentage,
                                         self.balancer_new.par_average,
                                         new_areas_par,
                                         new_circularity_par)
@@ -219,8 +219,8 @@ class RedistrictingDock(QtWidgets.QDockWidget, FORM_CLASS):
         if new_areas_state.__len__():
             self.stats_new.setStateValues(new_unused[1].__len__(),
                                           self.balancer_new.state_count_limit,
-                                          self.balancer_new.statemin_actual_precentage,
-                                          self.balancer_new.statemax_actual_precentage,
+                                          self.balancer_new.statemin_actual_percentage,
+                                          self.balancer_new.statemax_actual_percentage,
                                           self.balancer_new.state_average,
                                           new_areas_state,
                                           new_circularity_state)
@@ -323,7 +323,7 @@ class RedistrictingDock(QtWidgets.QDockWidget, FORM_CLASS):
         par_format = self.balancer_new.par_prefix_format
         state_format = self.balancer_new.state_prefix_format
         poll_format = self.balancer_new.polling_prefix_format
-        regexp = "(\d+)"
+        regexp = r"(\d+)"
         base_par = int(re.match(regexp, attributes_old[0][1][self.par_old_fieldname], re.I).group(1))
 
         # http://gis.stackexchange.com/questions/58296/speed-of-editing-attributes-in-qgis-from-a-python-plugin
@@ -448,8 +448,8 @@ class RedistrictingDock(QtWidgets.QDockWidget, FORM_CLASS):
         startdir = os.path.join(os.path.split(__file__)[0], "data")
 
         filepath, __ = QtWidgets.QFileDialog.getOpenFileName(parent=self,
-                                                             caption='Select shapefile',
-                                                             filter="*.shp",
+                                                             caption='Select file',
+                                                             filter="*.shp;*.gpkg",
                                                              directory=startdir)
         if filepath:
             path, filename = os.path.split(filepath)
@@ -1201,7 +1201,7 @@ class DelimitationToolboxConfigDialog(QtWidgets.QDialog, CONFIG_FORM_CLASS):
         content = config.Configuration().read_qt(config.Configuration.SETTINGS)
         if not content:
             with open(os.path.join(self.__path, config.defaultConfigFile), 'r') as f:
-                content = f.readall()
+                content = f.read()
         self.txt_settings.setText(content)
 
         super(DelimitationToolboxConfigDialog, self).show()

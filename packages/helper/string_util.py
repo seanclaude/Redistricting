@@ -1,4 +1,5 @@
 
+
 def parse_int(string):
     if string is None:
         return None
@@ -14,7 +15,7 @@ def parse_float(string):
         return None
 
     import re
-    if not re.match("^\d+?\.\d+?$", string):
+    if not re.match(r"^\d+?\.\d+?$", string):
         return None
 
     return float(string)
@@ -23,4 +24,4 @@ def parse_float(string):
 def remove_tags(text):
     import re
 
-    return re.sub("<[^>]*>", '', text)
+    return re.sub(r"<[^>]*>", '', text)

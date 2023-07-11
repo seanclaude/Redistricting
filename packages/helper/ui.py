@@ -12,7 +12,7 @@ from qgis.utils import iface
 from qgis.PyQt.QtCore import Qt, QVariant
 from qgis.PyQt.QtGui import QBrush
 from qgis.PyQt.QtWidgets import QListWidget, QListWidgetItem, QLabel, QProgressBar
-from helper.string import remove_tags
+from helper.string_util import remove_tags
 
 
 def isnull(instance):

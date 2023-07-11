@@ -72,18 +72,18 @@ class Balancer(object):
         self.state_average = 0
         self.statemax_target = None
         self.statemax_actual = None
-        self.statemax_actual_precentage = 0.00
+        self.statemax_actual_percentage = 0.00
         self.statemin_target = None
         self.statemin_actual = None
-        self.statemin_actual_precentage = 0.00
+        self.statemin_actual_percentage = 0.00
 
         self.par_average = 0
         self.parmax_target = None
         self.parmax_actual = None
-        self.parmax_actual_precentage = 0.00
+        self.parmax_actual_percentage = 0.00
         self.parmin_target = None
         self.parmin_actual = None
-        self.parmin_actual_precentage = 0.00
+        self.parmin_actual_percentage = 0.00
 
         self.polling_prefix_format = polling_prefix_format
         self.state_prefix_format = state_prefix_format
@@ -199,7 +199,7 @@ class Balancer(object):
         nfeatures = self.layer.featureCount()
         nop = nfeatures
         iop = 0
-        progress = QgisMessageBarProgress("Reading {} attribute fields ...".format(self.name))
+        progress = QgisMessageBarProgress("Reading {} attribute fields ... {} features".format(self.name, nfeatures))
         try:
             for f in self.layer.getFeatures():
                 self.topology_polling.update({f.id(): {
@@ -242,28 +242,40 @@ class Balancer(object):
         self.topology_par.clear()
         self.topology_init()
 
-        for k, v in self.topology_polling.items():
-            voters_value = v[self.voters_field]
-            geom_value = v[KEY_GEOMETRY]
-            key_state = v[self.state_field]
-            key_par = v[self.par_field]
-            if key_state:
-                self.topology_state.setdefault(key_state, {KEY_VOTERS: 0, KEY_GEOMETRY: geom_value})
-                if key_state in self.topology_state:
-                    self.topology_state[key_state][KEY_GEOMETRY] = QgsGeometry(
-                        self.topology_state[key_state][KEY_GEOMETRY].combine(geom_value))
-                self.topology_state[key_state][KEY_VOTERS] += voters_value
+        iop = 0
+        nop =  self.topology_polling.items().__len__()
+        progress = QgisMessageBarProgress("Loading topology ... {} features".format(self.name, nop))
+        try:
+            for k, v in self.topology_polling.items():
+                voters_value = v[self.voters_field]
+                geom_value = v[KEY_GEOMETRY]
+                key_state = v[self.state_field]
+                key_par = v[self.par_field]
+                if key_state:
+                    self.topology_state.setdefault(key_state, {KEY_VOTERS: 0, KEY_GEOMETRY: geom_value})
+                    if key_state in self.topology_state:
+                        self.topology_state[key_state][KEY_GEOMETRY] = QgsGeometry(
+                            self.topology_state[key_state][KEY_GEOMETRY].combine(geom_value))
+                    self.topology_state[key_state][KEY_VOTERS] += voters_value
 
-            if key_par:
-                self.topology_par.setdefault(key_par, {KEY_VOTERS: 0, KEY_GEOMETRY: geom_value})
-                if key_par in self.topology_par:
-                    self.topology_par[key_par][KEY_GEOMETRY] = QgsGeometry(
-                        self.topology_par[key_par][KEY_GEOMETRY].combine(geom_value))
-                self.topology_par[key_par][KEY_VOTERS] += voters_value
+                if key_par:
+                    self.topology_par.setdefault(key_par, {KEY_VOTERS: 0, KEY_GEOMETRY: geom_value})
+                    if key_par in self.topology_par:
+                        self.topology_par[key_par][KEY_GEOMETRY] = QgsGeometry(
+                            self.topology_par[key_par][KEY_GEOMETRY].combine(geom_value))
+                    self.topology_par[key_par][KEY_VOTERS] += voters_value
+
+                iop += 1
+                progress.setPercentage(int(100 * iop / nop))
+        except:
+            raise
+        finally:
+            progress.close()
 
         self.calculate_limits(self.delta)
         self.init_par_state_map()
         self.topology_dirty = False
+
 
     def get_colour_by_state(self, attr_value, colour_index):
         value = self.topology_state.get(attr_value)
@@ -335,21 +347,21 @@ class Balancer(object):
 
     def get_feature_label(self):
         if self.readonly:
-            return """CASE
+            return f"""CASE
                         WHEN
-                            {0} IS NULL or {1} IS NULL THEN ''
-                            ELSE concat(toint(regexp_substr({0}, '(\\\d+)')),
-                                '/', toint(regexp_substr({1}, '(\\\d+)')),
-                                CASE WHEN {2} IS NULL THEN ''
-                                ELSE concat('/', toint(regexp_substr(coalesce({2},''), '(\\\d+)'))) END)
-                        END""".format(self.par_field, self.state_field, self.polling_field)
+                            {self.par_field} IS NULL or {self.state_field} IS NULL THEN ''
+                            ELSE concat(toint(regexp_substr({self.par_field}, '(\\\d+)')),
+                                '/', toint(regexp_substr({self.state_field}, '(\\\d+)')),
+                                CASE WHEN {self.polling_field} IS NULL THEN ''
+                                ELSE concat('/', toint(regexp_substr(coalesce({self.polling_field},''), '(\\\d+)'))) END)
+                        END"""
 
-        return """CASE
+        return print(f"""CASE
                         WHEN
                             {0} IS NULL or {1} IS NULL THEN ''
                             ELSE concat(toint(regexp_substr({0}, '(\\\d+)')),
                                 '/', toint(regexp_substr({1}, '(\\\d+)')))
-                        END""".format(self.par_field, self.state_field)
+                        END""", self.par_field, self.state_field)
 
     def get_par_code_sequence(self):
         if list(self.topology_par.keys()).__len__():
@@ -411,9 +423,9 @@ class Balancer(object):
 
         if self.state_count:
             self.statemax_actual = max(v[KEY_VOTERS] for v in list(self.topology_state.values()))
-            self.statemax_actual_precentage = (self.statemax_actual - self.state_average) * 100 / self.state_average
+            self.statemax_actual_percentage = (self.statemax_actual - self.state_average) * 100 / self.state_average
             self.statemin_actual = min(v[KEY_VOTERS] for v in list(self.topology_state.values()))
-            self.statemin_actual_precentage = (self.statemin_actual - self.state_average) * 100 / self.state_average
+            self.statemin_actual_percentage = (self.statemin_actual - self.state_average) * 100 / self.state_average
 
         # for old topo
         if not self.par_count_limit:
@@ -425,12 +437,12 @@ class Balancer(object):
 
         if self.par_count:
             self.parmax_actual = max(v[KEY_VOTERS] for v in list(self.topology_par.values()))
-            self.parmax_actual_precentage = (self.parmax_actual - self.par_average) * 100 / self.par_average
+            self.parmax_actual_percentage = (self.parmax_actual - self.par_average) * 100 / self.par_average
             self.parmin_actual = min(v[KEY_VOTERS] for v in list(self.topology_par.values()))
-            self.parmin_actual_precentage = (self.parmin_actual - self.par_average) * 100 / self.par_average
+            self.parmin_actual_percentage = (self.parmin_actual - self.par_average) * 100 / self.par_average
 
     def get_best_deviation(self):
-        """assumming fixed number of seats"""
+        """assuming fixed number of seats"""
         state = [self.state_count, self.state_count_limit][bool(self.state_count_limit)]
         par = [self.par_count, self.par_count_limit][bool(self.par_count_limit)]
 

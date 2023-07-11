@@ -27,7 +27,7 @@ def delete_shapefile(output_filename):
 
 def get_epsg_from_shapefile(shapefile_path):
     """try get EPSG value from file"""
-    from helper.string import parse_int
+    from helper.string_util import parse_int
     epsg = None
 
     for ext in (".qpj", ".prj"):
