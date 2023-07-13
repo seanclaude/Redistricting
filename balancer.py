@@ -356,12 +356,12 @@ class Balancer(object):
                                 ELSE concat('/', toint(regexp_substr(coalesce({self.polling_field},''), '(\\\d+)'))) END)
                         END"""
 
-        return print(f"""CASE
+        return f"""CASE
                         WHEN
-                            {0} IS NULL or {1} IS NULL THEN ''
-                            ELSE concat(toint(regexp_substr({0}, '(\\\d+)')),
-                                '/', toint(regexp_substr({1}, '(\\\d+)')))
-                        END""", self.par_field, self.state_field)
+                            {self.par_field} IS NULL or {self.state_field} IS NULL THEN ''
+                            ELSE concat(toint(regexp_substr({self.par_field}, '(\\\d+)')),
+                                '/', toint(regexp_substr({self.state_field}, '(\\\d+)')))
+                        END"""
 
     def get_par_code_sequence(self):
         if list(self.topology_par.keys()).__len__():
