@@ -21,6 +21,7 @@
 from builtins import str
 from builtins import range
 from builtins import object
+from threading import Thread
 import math
 from . import colouring
 from .configuration import KEY_CIRCULARITY, KEY_COMPACTNESS, KEY_AREA, KEY_GEOMETRY, KEY_VOTERS, KEY_STATES
@@ -234,6 +235,25 @@ class Balancer(object):
 
         self.topology_dirty = True
 
+    def process_topology(self, v):
+        voters_value = v[self.voters_field]
+        geom_value = v[KEY_GEOMETRY]
+        key_state = v[self.state_field]
+        key_par = v[self.par_field]
+        if key_state:
+            self.topology_state.setdefault(key_state, {KEY_VOTERS: 0, KEY_GEOMETRY: geom_value})
+            if key_state in self.topology_state:
+                self.topology_state[key_state][KEY_GEOMETRY] = QgsGeometry(
+                    self.topology_state[key_state][KEY_GEOMETRY].combine(geom_value))
+            self.topology_state[key_state][KEY_VOTERS] += voters_value
+
+        if key_par:
+            self.topology_par.setdefault(key_par, {KEY_VOTERS: 0, KEY_GEOMETRY: geom_value})
+            if key_par in self.topology_par:
+                self.topology_par[key_par][KEY_GEOMETRY] = QgsGeometry(
+                    self.topology_par[key_par][KEY_GEOMETRY].combine(geom_value))
+            self.topology_par[key_par][KEY_VOTERS] += voters_value
+
     def topology_load(self):
         if not self.topology_dirty:
             return
@@ -247,23 +267,8 @@ class Balancer(object):
         progress = QgisMessageBarProgress("Loading topology ... {} features".format(self.name, nop))
         try:
             for k, v in self.topology_polling.items():
-                voters_value = v[self.voters_field]
-                geom_value = v[KEY_GEOMETRY]
-                key_state = v[self.state_field]
-                key_par = v[self.par_field]
-                if key_state:
-                    self.topology_state.setdefault(key_state, {KEY_VOTERS: 0, KEY_GEOMETRY: geom_value})
-                    if key_state in self.topology_state:
-                        self.topology_state[key_state][KEY_GEOMETRY] = QgsGeometry(
-                            self.topology_state[key_state][KEY_GEOMETRY].combine(geom_value))
-                    self.topology_state[key_state][KEY_VOTERS] += voters_value
-
-                if key_par:
-                    self.topology_par.setdefault(key_par, {KEY_VOTERS: 0, KEY_GEOMETRY: geom_value})
-                    if key_par in self.topology_par:
-                        self.topology_par[key_par][KEY_GEOMETRY] = QgsGeometry(
-                            self.topology_par[key_par][KEY_GEOMETRY].combine(geom_value))
-                    self.topology_par[key_par][KEY_VOTERS] += voters_value
+                t = Thread(target=self.process_topology, args=(v,))
+                t.start()
 
                 iop += 1
                 progress.setPercentage(int(100 * iop / nop))
