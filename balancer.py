@@ -21,13 +21,15 @@
 from builtins import str
 from builtins import range
 from builtins import object
-from threading import Thread
+import threading
+import multiprocessing
 import math
+
 from . import colouring
 from .configuration import KEY_CIRCULARITY, KEY_COMPACTNESS, KEY_AREA, KEY_GEOMETRY, KEY_VOTERS, KEY_STATES
 from enum import Enum
 from helper.ui import QgisMessageBarProgress, isnull
-from qgis.core import QgsVectorLayer, QgsFeature, QgsPoint, QgsGeometry
+from qgis.core import QgsVectorLayer, QgsFeature, QgsPoint, QgsGeometry, QgsMessageLog, Qgis
 from qgis.PyQt.QtCore import QVariant
 from .layer_type import LayerType
 
@@ -235,24 +237,25 @@ class Balancer(object):
 
         self.topology_dirty = True
 
-    def process_topology(self, v):
-        voters_value = v[self.voters_field]
-        geom_value = v[KEY_GEOMETRY]
-        key_state = v[self.state_field]
-        key_par = v[self.par_field]
-        if key_state:
-            self.topology_state.setdefault(key_state, {KEY_VOTERS: 0, KEY_GEOMETRY: geom_value})
-            if key_state in self.topology_state:
-                self.topology_state[key_state][KEY_GEOMETRY] = QgsGeometry(
-                    self.topology_state[key_state][KEY_GEOMETRY].combine(geom_value))
-            self.topology_state[key_state][KEY_VOTERS] += voters_value
+    def process_topology(self, v, semaphore):
+        with semaphore:
+            voters_value = v[self.voters_field]
+            geom_value = v[KEY_GEOMETRY]
+            key_state = v[self.state_field]
+            key_par = v[self.par_field]
+            if key_state:
+                self.topology_state.setdefault(key_state, {KEY_VOTERS: 0, KEY_GEOMETRY: geom_value})
+                if key_state in self.topology_state:
+                    self.topology_state[key_state][KEY_GEOMETRY] = QgsGeometry(
+                        self.topology_state[key_state][KEY_GEOMETRY].combine(geom_value))
+                self.topology_state[key_state][KEY_VOTERS] += voters_value
 
-        if key_par:
-            self.topology_par.setdefault(key_par, {KEY_VOTERS: 0, KEY_GEOMETRY: geom_value})
-            if key_par in self.topology_par:
-                self.topology_par[key_par][KEY_GEOMETRY] = QgsGeometry(
-                    self.topology_par[key_par][KEY_GEOMETRY].combine(geom_value))
-            self.topology_par[key_par][KEY_VOTERS] += voters_value
+            if key_par:
+                self.topology_par.setdefault(key_par, {KEY_VOTERS: 0, KEY_GEOMETRY: geom_value})
+                if key_par in self.topology_par:
+                    self.topology_par[key_par][KEY_GEOMETRY] = QgsGeometry(
+                        self.topology_par[key_par][KEY_GEOMETRY].combine(geom_value))
+                self.topology_par[key_par][KEY_VOTERS] += voters_value
 
     def topology_load(self):
         if not self.topology_dirty:
@@ -263,24 +266,29 @@ class Balancer(object):
         self.topology_init()
 
         iop = 0
-        nop =  self.topology_polling.items().__len__()
-        progress = QgisMessageBarProgress("Loading topology ... {} features".format(self.name, nop))
+
+        nop = self.topology_polling.items().__len__()
+        progressbar = QgisMessageBarProgress("Loading topology ... {} features".format(self.name, nop))
+
+        # init concurrency
+        semaphore = threading.BoundedSemaphore(multiprocessing.cpu_count())
         try:
             for k, v in self.topology_polling.items():
-                t = Thread(target=self.process_topology, args=(v,))
+                iop += 1
+                progress = int(100 * iop / nop)
+                t = threading.Thread(target=self.process_topology, args=(v, semaphore))
                 t.start()
 
-                iop += 1
-                progress.setPercentage(int(100 * iop / nop))
+                # progress should be updated when completed in a thread
+                # but doing so seems to crash QGIS silently, needs further investigation
+                progressbar.setPercentage(progress)
         except:
             raise
         finally:
-            progress.close()
-
+            progressbar.close()
         self.calculate_limits(self.delta)
         self.init_par_state_map()
         self.topology_dirty = False
-
 
     def get_colour_by_state(self, attr_value, colour_index):
         value = self.topology_state.get(attr_value)
@@ -389,8 +397,9 @@ class Balancer(object):
             return recommend_msg
 
         # get min/max for number of state seats in a par
-        seats_state_min = math.floor(1.0 * self.state_count_limit / self.par_count_limit)
-        seats_state_max = math.ceil(1.0 * self.state_count_limit / self.par_count_limit)
+        # handle the scenario where there is only one state seat, ie. there is no state seats, eg. Kuala Lumpur
+        seats_state_min = max(math.floor(1.0 * self.state_count_limit / self.par_count_limit), 1)
+        seats_state_max = max(math.ceil(1.0 * self.state_count_limit / self.par_count_limit), 1)
         seats_extras = self.state_count_limit % self.par_count_limit
 
         dun_size_with_max_seats = float(voters_par) / seats_state_max
@@ -398,7 +407,7 @@ class Balancer(object):
         dun_size_with_min_seats = float(voters_par) / seats_state_min
         delta_min = math.fabs(self.state_average - dun_size_with_min_seats)
 
-        # recommended sesats (voters)
+        # recommended seats (voters)
         if delta_max < delta_min:
             recommend_msg = "{} STATE seats.".format(int(seats_state_max))
         else:
